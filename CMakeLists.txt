@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.0)
-project(droneZero)
+project(dronezero)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_executable(droneZero main.cpp)
+add_executable(dronezero main.cpp)
 
 target_sources(${PROJECT_NAME} PRIVATE
     uart.cpp
@@ -12,7 +12,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 
 find_package(Threads REQUIRED)
 
-target_link_libraries(droneZero
+target_link_libraries(dronezero
     Threads::Threads
     pthread
 )
