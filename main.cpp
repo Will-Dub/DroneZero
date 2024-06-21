@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <termios.h>
 #include <cstring>
+#include "message.cpp"
 #include "uart.h"
 
 /**
@@ -47,10 +48,16 @@ int main() {
         //-------------------------------------------
         //Handle new data from the pico
         if (uart.isNewDataReceived()) {
-            std::vector<std::string> lines = uart.getReceivedLines();
-            for (const std::string& line : lines) {
-                std::cout << "IN: " << line << std::endl;
-                // Additional processing logic for each line
+            auto start = std::chrono::high_resolution_clock::now();
+            std::optional<Message> receivedMessage = uart.getReceiveMessage();
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration_micros = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+            std::cout << "Temps: " << duration_micros << " sec" << std::endl;
+            
+            if (receivedMessage.has_value()) {
+                std::cout << "Lat: " << receivedMessage.value().data.sensor_data.gps_latitude << std::endl;
+                std::cout << "Long: " << receivedMessage.value().data.sensor_data.gps_longitude << std::endl;
             }
         }
 
