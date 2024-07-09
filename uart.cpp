@@ -126,7 +126,7 @@ std::optional<Message> UART::getReceiveMessage() {
             } else {
                 received_data.clear(); // No more start marker found, clear all data
             }
-            continue;
+            return std::nullopt;
         }
 
         // Extract and deserialize the message
@@ -147,12 +147,31 @@ void UART::listenForData() {
     uint8_t buffer[256];
     while (true) {
         if (uart_filestream != -1) {
+            fd_set read_fds;
+            FD_ZERO(&read_fds);
+            FD_SET(uart_filestream, &read_fds);
+            
+            struct timeval timeout;
+            timeout.tv_sec = 0;
+            timeout.tv_usec = 100000;  // 100ms timeout
+            
+            int select_result = select(uart_filestream + 1, &read_fds, NULL, NULL, &timeout);
+            if (select_result == -1) {
+                std::cerr << "Error in select()" << std::endl;
+                continue;
+            } else if (select_result == 0) {
+                // No data available, continue waiting
+                continue;
+            }
+
+            // Read data in chunks
             int length = read(uart_filestream, buffer, sizeof(buffer));
             if (length > 0) {
                 std::lock_guard<std::mutex> lock(mtx);
                 received_data.insert(received_data.end(), buffer, buffer + length);
                 newDataReceived = true;
             }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
 }

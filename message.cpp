@@ -9,9 +9,7 @@
 // Message types
 enum class MessageType {
     SensorData,
-    Command,
-    StatusUpdate,
-    Unknown
+    LogData,
 };
 
 // Flight mode enumeration
@@ -50,14 +48,47 @@ struct SensorData {
     bool uart_zero_connected, uart_gps_connected, i2c_connected;
 };
 
+enum LogType : uint8_t {
+    Error,
+    Info
+};
+
+struct LogData {
+    //Log data
+    LogType type;
+    char message[30];
+};
+
 // Unified message structure
+/*
+
+MARKER
+
+LENGTH
+
+LENGTH
+
+TYPE * 4
+
+DATA * 96
+
+CHECKSUM
+
+CHECKSUM
+
+END_MARKER
+
+Total: 103 byte
+*/
 struct Message {
     static constexpr uint8_t START_MARKER = 0x7E;
     static constexpr uint8_t END_MARKER = 0x7E;
 
     MessageType type;
+
     union {
         SensorData sensor_data;
+        LogData log_data;
         // Add other data structures here
     } data;
 
@@ -70,31 +101,44 @@ struct Message {
     }
 
     size_t serialize(uint8_t* buffer, size_t buffer_size) const {
-        if (buffer_size < sizeof(data) + 7) return 0;
+        size_t data_size = 0;
 
-        //Byte 0
+        switch (type) {
+            case MessageType::SensorData:
+                data_size = sizeof(SensorData);
+                break;
+            case MessageType::LogData:
+                data_size = sizeof(LogData);
+                break;
+            // Handle other message types here
+        }
+
+        if (buffer_size < 7 + data_size) return 0;
+
+        // Byte 0
         buffer[0] = START_MARKER;
 
-        //Calcul longueur du message(type est cast a 1 byte ensuite)
-        uint16_t message_length = sizeof(uint8_t) + sizeof(data);
+        // Calculate message length (type + data size)
+        uint16_t message_length = sizeof(uint8_t) + data_size;
 
-        //Byte 1 et 2
+        // Bytes 1-2
         memcpy(buffer + 1, &message_length, sizeof(uint16_t));
 
-        //Byte 3
-        buffer[1 + sizeof(uint16_t)] = static_cast<uint8_t>(type);
-        
-        //Byte 4-99
-        memcpy(buffer + 1 + sizeof(uint16_t) + sizeof(uint8_t), &data, sizeof(data));
+        // Byte 3
+        buffer[3] = static_cast<uint8_t>(type);
 
-        uint16_t checksum = calculateChecksum(buffer + 3, sizeof(uint8_t) + sizeof(data));
-        //Byte 100, 101
-        memcpy(buffer + 1 + sizeof(uint16_t) + sizeof(uint8_t) + sizeof(data), &checksum, sizeof(uint16_t));
+        // Bytes 4-(3+data_size)
+        memcpy(buffer + 4, &data, data_size);
 
-        //Byte 102
-        buffer[1 + sizeof(uint16_t) + sizeof(uint8_t) + sizeof(data) + sizeof(uint16_t)] = END_MARKER;
+        uint16_t checksum = calculateChecksum(buffer + 3, message_length);
 
-        return 1 + sizeof(uint16_t) + sizeof(uint8_t) + sizeof(data) + sizeof(uint16_t) + 1;
+        // Bytes (4+data_size)-(5+data_size)
+        memcpy(buffer + 4 + data_size, &checksum, sizeof(uint16_t));
+
+        // Byte (6+data_size)
+        buffer[6 + data_size] = END_MARKER;
+
+        return 7 + data_size;
     }
 
     bool deserialize(const uint8_t* buffer, size_t buffer_size) {
@@ -102,8 +146,8 @@ struct Message {
 
         uint16_t message_length;
         memcpy(&message_length, buffer + 1, sizeof(uint16_t));
-        
-        if (buffer_size < 3 + message_length + sizeof(uint16_t) + 1) return false;
+
+        if (buffer_size < 6 + message_length) return false;
 
         uint16_t checksum;
         memcpy(&checksum, buffer + 3 + message_length, sizeof(uint16_t));
@@ -112,8 +156,19 @@ struct Message {
         if (checksum != calculated_checksum) return false;
 
         memcpy(&type, buffer + 3, sizeof(uint8_t));
-        memcpy(&data, buffer + 4, sizeof(data));
-        
+
+        size_t data_size = 0;
+        switch (type) {
+            case MessageType::SensorData:
+                data_size = sizeof(SensorData);
+                break;
+            case MessageType::LogData:
+                data_size = sizeof(LogData);
+                break;
+        }
+
+        memcpy(&data, buffer + 4, data_size);
+
         return true;
     }
 };
