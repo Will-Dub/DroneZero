@@ -1,9 +1,6 @@
 #include <iostream>
 #include <string>
-#include <thread>
 #include <vector>
-#include <mutex>
-#include <condition_variable>
 #include <fcntl.h>
 #include <unistd.h>
 #include <termios.h>
@@ -12,30 +9,33 @@
 #include "message.cpp"
 #include "uart.h"
 #include <signal.h>
+
+// Thread
 #include <atomic>
 #include <condition_variable>
 #include <queue>
+#include <thread>
+#include <mutex>
 
 //Bluetooth
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/rfcomm.h>
 
+//Camera
+#include <raspicam/raspicam.h>
+
+struct Data {
+    std::vector<uint8_t> content;
+    std::string type;
+};
+
 std::atomic<bool> running(true);
-std::queue<std::string> data_queue;
-std::mutex queue_mutex;
+std::queue<Data> send_queue;
+std::queue<Data> receive_queue;
+std::mutex send_queue_mutex;
+std::mutex receive_queue_mutex;
+std::condition_variable send_queue_condition;
 int client_socket = -1;
-
-/*
-* Bluetooth
-*/
-void signal_handler(int sig) {
-    running = false;
-}
-
-void data_received(int client_socket, char *buf, int bytes_read) {
-    std::lock_guard<std::mutex> lock(queue_mutex);
-    data_queue.push(std::string(buf, bytes_read));
-}
 
 /**
  * Listen for new data on the uart and store it
@@ -44,24 +44,56 @@ void uartListenerTask(UART* uart) {
     uart->listenForData();
 }
 
-void uartSenderTask(UART* uart) {
-    int count = 0;
-    while (true) {
-        std::string message = "Salut " + std::to_string(count);
-        count++;
+/*
+*    Bluetooth
+*/
+void bluetoothSendTask(int client_socket) {
+    while (running) {
+        std::unique_lock<std::mutex> lock(send_queue_mutex);
+        send_queue_condition.wait(lock, [] { return !send_queue.empty() || !running; });
 
-        std::cout << "Out: " << message << std::endl;
+        while (!send_queue.empty()) {
+            Data data = send_queue.front();
+            send_queue.pop();
+            lock.unlock();
 
-        uart->writeLine(message);
-        uart->flush();
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+            // Send data via Bluetooth
+            int bytes_sent = send(client_socket, data.content.data(), data.content.size(), 0);
+            if (bytes_sent < 0) {
+                perror("Send failed");
+                break;
+            }
+
+            lock.lock();
+        }
+    }
+}
+
+void bluetoothReceiveTask(int client_socket) {
+    char buf[1024] = {0};
+    while (running) {
+        memset(buf, 0, sizeof(buf));
+        int bytes_read = recv(client_socket, buf, sizeof(buf), 0);
+        if (bytes_read > 0) {
+            std::cout << "Data: " << std::string(buf, bytes_read) << std::endl;
+            
+            Data data;
+            data.content = std::vector<uint8_t>(buf, buf + bytes_read);
+            data.type = "message";
+
+            std::lock_guard<std::mutex> lock(receive_queue_mutex);
+            receive_queue.push(data);
+        } else if (bytes_read < 0) {
+            perror("Receive failed");
+            break;
+        }
     }
 }
 
 void bluetoothServerTask() {
     struct sockaddr_rc loc_addr = { 0 }, rem_addr = { 0 };
     char buf[1024] = { 0 };
-    int server_socket, client_socket, bytes_read;
+    int server_socket, client_socket;
     socklen_t opt = sizeof(rem_addr);
 
     //Allocate socket
@@ -74,7 +106,7 @@ void bluetoothServerTask() {
     //Bind bluetooth socket
     loc_addr.rc_family = AF_BLUETOOTH;
     loc_addr.rc_bdaddr = {{0, 0, 0, 0, 0, 0}};
-    loc_addr.rc_channel = (uint8_t)1;
+    loc_addr.rc_channel = (uint8_t) 1;
     if (bind(server_socket, (struct sockaddr *)&loc_addr, sizeof(loc_addr)) < 0) {
         perror("Bind failed");
         close(server_socket);
@@ -90,53 +122,56 @@ void bluetoothServerTask() {
 
     //Main loop
     while (running) {
-        //Accept connection
-        int new_client_socket = accept(server_socket, (struct sockaddr *)&rem_addr, &opt);
+        // Accept connection
+        client_socket = accept(server_socket, (struct sockaddr *)&rem_addr, &opt);
         if (client_socket < 0) {
-            perror("Accept failed");
+            if (running) {
+                perror("Accept failed");
+            }
             continue;
         }
 
         ba2str(&rem_addr.rc_bdaddr, buf);
         fprintf(stderr, "Accepted connection from %s\n", buf);
 
-        {
-            std::lock_guard<std::mutex> lock(queue_mutex);
-            client_socket = new_client_socket;
-        }
+        // Start sending and receiving tasks
+        std::thread send_thread(bluetoothSendTask, client_socket);
+        std::thread receive_thread(bluetoothReceiveTask, client_socket);
 
-        //Loop for receiving and sending data
-        while (running) {
-            memset(buf, 0, sizeof(buf));
-
-            //Read data from the client
-            bytes_read = recv(client_socket, buf, sizeof(buf), 0);
-            if (bytes_read <= 0) {
-                break;
-            }
-
-            //Process received data
-            data_received(client_socket, buf, bytes_read);
-        }
-
-        //Close connection
-        {
-            std::lock_guard<std::mutex> lock(queue_mutex);
-            close(client_socket);
-            client_socket = -1;
-        }
+        // Detach threads to handle multiple clients
+        send_thread.detach();
+        receive_thread.detach();
     }
 
     //Close socket
     close(server_socket);
 }
 
+void signal_handler(int signal) {
+    if (signal == SIGINT) {
+        running = false;
+        send_queue_condition.notify_all();
+    }
+}
+
 int main() {
     signal(SIGINT, signal_handler);
 
     //-------------------------------------------
-    //Variable declaration
+    //Variable init
     UART uart("/dev/ttyS0", B230400);
+
+    /*raspicam::RaspiCam Camera;
+    Camera.open();
+    if (!Camera.isOpened()) {
+        std::cerr << "Error opening camera" << std::endl;
+        return -1;
+    }
+
+    Camera.grab();
+    unsigned char *data = new unsigned char[Camera.getImageTypeSize(raspicam::RASPICAM_FORMAT_RGB)];
+    Camera.retrieve(data, raspicam::RASPICAM_FORMAT_RGB);
+    delete[] data;*/
 
     //-------------------------------------------
     //Start threads
@@ -163,7 +198,7 @@ int main() {
                         messageCount++;
                         break;
                     case MessageType::LogData:
-                        std::cout << "New message: " << received_message.data.log_data.message << std::endl;
+                        std::cout << "Received data(pico): " << received_message.data.log_data.message << std::endl;
                         break;
                 }
             }
@@ -171,28 +206,37 @@ int main() {
 
         //-------------------------------------------
         //Handle new data from the bluetooth
-        std::lock_guard<std::mutex> lock(queue_mutex);
-        while (!data_queue.empty()) {
-            std::string data = data_queue.front();
-            data_queue.pop();
+        {
+            std::lock_guard<std::mutex> lock(receive_queue_mutex);
+            while (!receive_queue.empty()) {
+                Data received_data = receive_queue.front();
+                receive_queue.pop();
 
-            std::cout << "Data received: " << data << std::endl;
-
-            if (client_socket >= 0) {
-                ssize_t bytes_sent = send(client_socket, data.c_str(), data.size(), 0);
-                if (bytes_sent < 0) {
-                    perror("Failed to send data");
-                } else {
-                    std::cout << "Sent data: " << data << std::endl;
-                }
+                // Process the received data (e.g., print it)
+                std::cout << "Received data(bluetooth): " << std::string(received_data.content.begin(), received_data.content.end()) << std::endl;
             }
         }
-        
 
+        //-------------------------------------------
+        //Send new data bluetooth
+        /*Data data;
+        data.type = "message";
+        std::string msg = "Test send";
+        data.content = std::vector<uint8_t>(msg.begin(), msg.end());
+
+        {
+            std::lock_guard<std::mutex> lock(send_queue_mutex);
+            send_queue.push(data);
+        }
+        send_queue_condition.notify_one();*/
+        
+        //-------------------------------------------
+        //Calculate message per seconds
         auto currentTime = std::chrono::steady_clock::now();
         auto elapsedTime = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count();
+        messageCount++;
         if (elapsedTime >= 1) {
-            std::cout << "Messages received per second: " << messageCount << std::endl;
+            std::cout << "Message received(per s): " << messageCount << std::endl;
             messageCount = 0;
             startTime = std::chrono::steady_clock::now();
         }

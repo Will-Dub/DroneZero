@@ -22,6 +22,7 @@ target_link_libraries(dronezero
     Threads::Threads
     pthread
     ${BLUEZ_LIBRARIES}
+    raspicam
 )
 
 find_package(Threads REQUIRED)
