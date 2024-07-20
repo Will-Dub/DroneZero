@@ -1,4 +1,4 @@
-#include "uart.h"
+#include "UART.h"
 
 UART::UART(const char* device, int baud) : newDataReceived(false) {
     uart_filestream = open(device, O_RDWR | O_NOCTTY | O_NDELAY);
@@ -20,38 +20,28 @@ UART::~UART() {
     close(uart_filestream);
 }
 
-void UART::write(const std::string& data) {
+int UART::write(const std::string& data) {
     if (uart_filestream != -1) {
         int count = ::write(uart_filestream, data.c_str(), data.size());
-        if (count < 0) {
-            std::cerr << "UART TX error" << std::endl;
+        if (count <= 0) {
+            return 1;
         }
     }
+    return 0;
 }
 
-void UART::writeLine(const std::string& data) {
-    if (uart_filestream != -1) {
-        int count = ::write(uart_filestream, data.c_str(), data.size());
-        if (count < 0) {
-            std::cerr << "UART TX error" << std::endl;
-        }
-
-        // Write newline character
-        const char newline = '\n';
-        int count_newline = ::write(uart_filestream, &newline, 1);
-        if (count_newline < 0) {
-            std::cerr << "UART TX error" << std::endl;
-        }
-    }
-}
-
-void UART::writeMessage(const Message &message) {
+int UART::writeMessage(const Message &data) {
     uint8_t buffer[256];
-    size_t message_size = message.serialize(buffer, sizeof(buffer));
+    size_t data_size = data.serialize(buffer, sizeof(buffer));
     
     if (uart_filestream != -1) {
-        ::write(uart_filestream, buffer, message_size);
+        int count = ::write(uart_filestream, buffer, data_size);
+        if(count <= 0){
+            return 1;
+        }
     }
+
+    return 0;
 }
 
 void UART::flush() {
@@ -78,7 +68,7 @@ bool UART::isNewDataReceived() {
     return lines;
 }*/
 
-std::optional<Message> UART::getReceiveMessage() {
+std::optional<Message> UART::getReceivedMessage() {
     std::lock_guard<std::mutex> lock(mtx);
 
     const size_t MAX_BUFFER_SIZE = 2000; // Maximum size of received_data buffer
