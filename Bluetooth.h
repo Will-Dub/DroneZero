@@ -13,24 +13,25 @@
 #include <bluetooth/rfcomm.h>
 #include <spdlog/spdlog.h>
 
-struct Data {
-    std::vector<uint8_t> content;
-    std::string type;
+enum DataType : uint8_t {
+    IMAGE,
+    TEST
+};
+
+struct DataPacket {
+    DataType type;
+    uint32_t dataSize;
+    std::vector<uint8_t> data;
 };
 
 class Bluetooth {
 private:
-    void bluetoothSendTask(int client_socket);
-    void bluetoothReceiveTask(int client_socket);
     void bluetoothServerTask();
 
     std::atomic<bool> is_running;
     std::atomic<bool> is_client_connected;
-    std::queue<Data> send_queue;
-    std::queue<Data> receive_queue;
-    std::mutex send_queue_mutex;
+    std::queue<DataPacket> receive_queue;
     std::mutex receive_queue_mutex;
-    std::condition_variable send_queue_condition;
     int client_socket;
 
 public:
@@ -42,9 +43,11 @@ public:
 
     void stop();
 
-    std::unique_ptr<Data> getReceivedData();
+    std::unique_ptr<DataPacket> getReceivedData();
 
-    void sendData(Data data);
+    bool sendData(DataPacket data);
+
+    void sendImage(const std::vector<uint8_t>& bmpData);
 
     bool isRunning();
 

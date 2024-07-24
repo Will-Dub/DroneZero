@@ -40,18 +40,24 @@ void signal_handler(int signal) {
     }
 }
 
+void saveImage(const std::vector<uint8_t>& bmpData, const std::string& filename) {
+    std::ofstream file(filename, std::ios::binary);
+
+    if (!file) {
+        std::cerr << "Unable to open file for writing." << std::endl;
+        return;
+    }
+
+    file.write(reinterpret_cast<const char*>(bmpData.data()), bmpData.size());
+    file.close();
+}
+
+
 int main() {
     signal(SIGINT, signal_handler);
 
     //-------------------------------------------
     //Variable init
-    //Uart
-    UART uart("/dev/ttyS0", B230400);
-
-    //Camera
-    Camera camera;
-    camera.init();
-
     //Logger
     auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>("logs/basic_log.txt", true);
 
@@ -61,23 +67,28 @@ int main() {
     auto logger = std::make_shared<spdlog::logger>("multi_sink", sinks.begin(), sinks.end());
 
     spdlog::set_default_logger(logger);
-    spdlog::set_pattern("%Y-%m-%d %H:%M:%S.%e %l %n: %v");
 
     spdlog::info("-------------START-------------");
+
+    //Uart
+    UART uart("/dev/ttyS0", B230400);
+
+    std::thread listenerThread(uartListenerTask, &uart);
+
+    //Camera
+    Camera camera;
+    camera.init();
 
     //Bluetooth
     Bluetooth bluetooth;
     bluetooth.startServer();
 
     //-------------------------------------------
-    //Start threads
-    std::thread listenerThread(uartListenerTask, &uart);
+    //Main loop
 
     int messageCount = 0;
     auto startTime = std::chrono::steady_clock::now();
-
-    //-------------------------------------------
-    //Main loop
+    
     while (is_running) {
         //-------------------------------------------
         //Handle new data from the pico
@@ -101,10 +112,10 @@ int main() {
 
         //-------------------------------------------
         //Handle new data from the bluetooth
-        std::unique_ptr<Data> new_received_data = bluetooth.getReceivedData();
-        if(new_received_data){
-            std::cout << "Received data(bluetooth): " << std::string(new_received_data->content.begin(), new_received_data->content.end()) << std::endl;
-        }
+        //std::unique_ptr<DataPacket> new_received_data = bluetooth.getReceivedData();
+        //if(new_received_data){
+        //    std::cout << "Received data(bluetooth): " << std::string(new_received_data->content.begin(), new_received_data->content.end()) << std::endl;
+        //}
 
         //-------------------------------------------
         //Send new data bluetooth
@@ -115,11 +126,21 @@ int main() {
         auto elapsedTime = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count();
         messageCount++;
         if (elapsedTime >= 1) {
-            Data data;
-            data.type = "message";
-            std::string msg = "Test send";
-            data.content = std::vector<uint8_t>(msg.begin(), msg.end());
-            bluetooth.sendData(data);
+            if(bluetooth.isClientConnected()){
+                size_t imageSize = camera.getImageBufferSize();
+
+                std::vector<uint8_t> imageData = camera.captureImage();
+
+                saveImage(imageData, "te11.txt");
+
+                std::vector<uint8_t> bmpData = camera.convertToBMP(imageData, camera.getWidth(), camera.getHeight());
+
+                saveImage(bmpData, "tessssst1.bmp");
+
+                spdlog::info("-------------Sending-------------");
+                bluetooth.sendImage(bmpData);
+                spdlog::info("-------------End sending-------------");
+            }
 
             std::cout << "Message received(per s): "<< messageCount << std::endl;
             messageCount = 0;
