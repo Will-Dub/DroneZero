@@ -15,7 +15,7 @@
 #include <iostream>
 #include <algorithm>	
 
-#include "message.cpp"
+#include "Message.h"
 
 class UART {
 private:

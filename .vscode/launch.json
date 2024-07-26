@@ -5,7 +5,7 @@
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/dronezero",
+            "program": "${workspaceFolder}/build/src/droneZero",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

@@ -1,10 +1,9 @@
-#include <cstring>
-#include <stdio.h>
-#include <sstream>
-
 #ifndef MESSAGE_H
 #define MESSAGE_H
 
+#include <cstring>
+#include <cstdio>
+#include <sstream>
 
 // Message types
 enum class MessageType {
@@ -54,14 +53,13 @@ enum LogType : uint8_t {
 };
 
 struct LogData {
-    //Log data
+    // Log data
     LogType type;
     char message[30];
 };
 
 // Unified message structure
 /*
-
 MARKER
 
 LENGTH
@@ -78,7 +76,7 @@ CHECKSUM
 
 END_MARKER
 
-Total: 103 byte
+Total: 103 bytes
 */
 struct Message {
     static constexpr uint8_t START_MARKER = 0x7E;
@@ -172,4 +170,5 @@ struct Message {
         return true;
     }
 };
+
 #endif

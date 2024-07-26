@@ -6,11 +6,13 @@
 #include <termios.h>
 #include <cstring>
 #include <optional>
-#include "message.cpp"
-#include "UART.h"
 #include <signal.h>
+
+// Local
 #include "Camera.h"
 #include "Bluetooth.h"
+#include "Message.h"
+#include "UART.h"
 
 // Thread
 #include <atomic>
@@ -60,7 +62,7 @@ int main() {
     //-------------------------------------------
     //Variable init
     //Logger
-    auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>("logs/basic_log.txt", true);
+    auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(".logs/basic_log.txt", true);
 
     auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
 
