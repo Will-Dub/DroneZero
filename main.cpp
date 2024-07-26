@@ -40,18 +40,19 @@ void signal_handler(int signal) {
     }
 }
 
-void saveImage(const std::vector<uint8_t>& bmpData, const std::string& filename) {
-    std::ofstream file(filename, std::ios::binary);
+void sendCaptureTask(Camera camera, Bluetooth bluetooth){
+    size_t imageSize = camera.getImageBufferSize();
 
-    if (!file) {
-        std::cerr << "Unable to open file for writing." << std::endl;
-        return;
-    }
+    std::vector<uint8_t> imageData = camera.captureImage();
 
-    file.write(reinterpret_cast<const char*>(bmpData.data()), bmpData.size());
-    file.close();
+    DataPacket dataPacket;
+    dataPacket.type = DataType::IMAGE;
+    dataPacket.data = camera.convertToJpeg(imageData, camera.getWidth(), camera.getHeight(), 30);
+    dataPacket.dataSize = dataPacket.data.size();
+
+    bluetooth.sendData(dataPacket);
+    return;
 }
-
 
 int main() {
     signal(SIGINT, signal_handler);
@@ -117,31 +118,35 @@ int main() {
             spdlog::info("Received data(bluetooth): {}", std::string(new_received_data->data.begin(), new_received_data->data.end()));
             spdlog::info("Received data size(bluetooth): {}", new_received_data->dataSize);
             spdlog::info("Received data type(bluetooth): {}", new_received_data->type);
+
+            switch (new_received_data->type){
+                case DataType::TEXT:
+                    break;
+                default:
+                    break;
+            }
         }
 
         //-------------------------------------------
         //Send new data bluetooth
 
-        if(bluetooth.isClientConnected()){
-            size_t imageSize = camera.getImageBufferSize();
-
-            std::vector<uint8_t> imageData = camera.captureImage();
-
-            DataPacket dataPacket;
-            dataPacket.type = DataType::IMAGE;
-            dataPacket.data = camera.convertToJpeg(imageData, camera.getWidth(), camera.getHeight(), 30);
-            dataPacket.dataSize = dataPacket.data.size();
-
-            bluetooth.sendData(dataPacket);
-            messageCount++;
-        } 
         
         //-------------------------------------------
         //Calculate message per seconds
         auto currentTime = std::chrono::steady_clock::now();
         auto elapsedTime = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count();
         if (elapsedTime >= 1) {
-            std::cout << "Message received(per s): "<< messageCount << std::endl;
+            if(bluetooth.isClientConnected()){
+                DataPacket dataPacket;
+                dataPacket.type = DataType::TEXT;
+                std::string strData = "";
+                dataPacket.data = std::vector<uint8_t>(strData.begin(), strData.end());
+
+                dataPacket.dataSize = dataPacket.data.size();
+
+                bluetooth.sendData(dataPacket);
+            } 
+            //std::cout << "Image taken(per s): "<< messageCount << std::endl;
             messageCount = 0;
             startTime = std::chrono::steady_clock::now();
         }

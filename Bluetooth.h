@@ -27,12 +27,20 @@ struct DataPacket {
 class Bluetooth {
 private:
     void bluetoothServerTask();
+    void bluetoothSendTask(int client_socket);
 
     std::atomic<bool> is_running;
     std::atomic<bool> is_client_connected;
+    int client_socket;
+
+    //Receive
     std::queue<DataPacket> receive_queue;
     std::mutex receive_queue_mutex;
-    int client_socket;
+
+    //Send
+    std::queue<DataPacket> send_queue;
+    std::mutex send_queue_mutex;
+    std::condition_variable send_queue_condition;
 
 public:
     Bluetooth();
@@ -45,11 +53,13 @@ public:
 
     std::unique_ptr<DataPacket> getReceivedData();
 
-    void sendData(DataPacket data);
+    void sendData(DataPacket dataPacket);
 
     bool isRunning();
 
     bool isClientConnected();
+
+    void clearSendQueue();
 };
 
 #endif
