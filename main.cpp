@@ -104,7 +104,7 @@ int main() {
                         messageCount++;
                         break;
                     case MessageType::LogData:
-                        std::cout << "Received data(pico): " << received_message.data.log_data.message << std::endl;
+                        spdlog::info("Received data(pico): {}", received_message.data.log_data.message);
                         break;
                 }
             }
@@ -112,36 +112,35 @@ int main() {
 
         //-------------------------------------------
         //Handle new data from the bluetooth
-        //std::unique_ptr<DataPacket> new_received_data = bluetooth.getReceivedData();
-        //if(new_received_data){
-        //    std::cout << "Received data(bluetooth): " << std::string(new_received_data->content.begin(), new_received_data->content.end()) << std::endl;
-        //}
+        std::unique_ptr<DataPacket> new_received_data = bluetooth.getReceivedData();
+        if(new_received_data){
+            spdlog::info("Received data(bluetooth): {}", std::string(new_received_data->data.begin(), new_received_data->data.end()));
+            spdlog::info("Received data size(bluetooth): {}", new_received_data->dataSize);
+            spdlog::info("Received data type(bluetooth): {}", new_received_data->type);
+        }
 
         //-------------------------------------------
         //Send new data bluetooth
+
+        if(bluetooth.isClientConnected()){
+            size_t imageSize = camera.getImageBufferSize();
+
+            std::vector<uint8_t> imageData = camera.captureImage();
+
+            DataPacket dataPacket;
+            dataPacket.type = DataType::IMAGE;
+            dataPacket.data = camera.convertToJpeg(imageData, camera.getWidth(), camera.getHeight(), 30);
+            dataPacket.dataSize = dataPacket.data.size();
+
+            bluetooth.sendData(dataPacket);
+            messageCount++;
+        } 
         
         //-------------------------------------------
         //Calculate message per seconds
         auto currentTime = std::chrono::steady_clock::now();
         auto elapsedTime = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count();
-        messageCount++;
         if (elapsedTime >= 1) {
-            if(bluetooth.isClientConnected()){
-                size_t imageSize = camera.getImageBufferSize();
-
-                std::vector<uint8_t> imageData = camera.captureImage();
-
-                saveImage(imageData, "te11.txt");
-
-                std::vector<uint8_t> bmpData = camera.convertToBMP(imageData, camera.getWidth(), camera.getHeight());
-
-                saveImage(bmpData, "tessssst1.bmp");
-
-                spdlog::info("-------------Sending-------------");
-                bluetooth.sendImage(bmpData);
-                spdlog::info("-------------End sending-------------");
-            }
-
             std::cout << "Message received(per s): "<< messageCount << std::endl;
             messageCount = 0;
             startTime = std::chrono::steady_clock::now();

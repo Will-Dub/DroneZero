@@ -1,11 +1,8 @@
 #include "Camera.h"
 
-Camera::Camera() : data(nullptr), is_camera_connected(false) {}
+Camera::Camera() : is_camera_connected(false) {}
 
 Camera::~Camera() {
-    if (data) {
-        delete[] data;
-    }
     camera.release();
 }
 
@@ -27,34 +24,10 @@ bool Camera::IsConnected(){
     return is_camera_connected;
 }
 
-bool Camera::takePicture(const std::string &filename) {
-    if (!camera.grab()) {
-        spdlog::critical("Error capturing image");
-        is_camera_connected = false;
-        return false;
-    }
-
-    unsigned int imageSize = camera.getImageBufferSize();
-    std::unique_ptr<uint8_t[]> imageData = std::make_unique<uint8_t[]>(imageSize);
-
-    camera.retrieve(imageData.get(), raspicam::RASPICAM_FORMAT_RGB);
-
-    std::ofstream outFile(filename, std::ios::binary);
-    if (!outFile) {
-        spdlog::warn("Error opening output file");
-        return false;
-    }
-
-    outFile << "P6\n" << camera.getWidth() << " " << camera.getHeight() << " 255\n";
-    outFile.write(reinterpret_cast<char*>(data), camera.getImageBufferSize());
-    outFile.close();
-
-    return true;
-}
-
 std::vector<uint8_t> Camera::captureImage() {
     if (!camera.isOpened()) {
         spdlog::critical("Camera is not opened");
+        is_camera_connected = false;
         return {};
     }
 
@@ -65,17 +38,10 @@ std::vector<uint8_t> Camera::captureImage() {
     }
 
     unsigned long bytes = camera.getImageBufferSize();
-    spdlog::info("Image buffer size: {} bytes", bytes);
 
     std::vector<uint8_t> imageData(bytes);
 
-    camera.retrieve(imageData.data(), raspicam::RASPICAM_FORMAT_RGB);
-
-    if (std::all_of(imageData.begin(), imageData.end(), [](uint8_t byte) { return byte == 0; })) {
-        spdlog::warn("Captured image data is filled with zeros");
-    } else {
-        spdlog::info("Image captured successfully");
-    }
+    camera.retrieve(imageData.data());
 
     return imageData;
 }
@@ -111,4 +77,45 @@ std::vector<uint8_t> Camera::convertToBMP(const std::vector<uint8_t>& imageData,
     std::memcpy(&bmp[54], imageData.data(), imageData.size());
 
     return bmp;
+}
+
+std::vector<uint8_t> Camera::convertToJpeg(const std::vector<uint8_t>& imageData, int width, int height, int quality) {
+    struct jpeg_compress_struct cinfo;
+    struct jpeg_error_mgr jerr;
+
+    // Initialize the JPEG compression object with default error handling.
+    cinfo.err = jpeg_std_error(&jerr);
+    jpeg_create_compress(&cinfo);
+
+    // Use a memory buffer to store the JPEG data.
+    unsigned char* jpegBuffer = nullptr;
+    unsigned long jpegSize = 0;
+    jpeg_mem_dest(&cinfo, &jpegBuffer, &jpegSize);
+
+    cinfo.image_width = width;
+    cinfo.image_height = height;
+    cinfo.input_components = 3; // RGB
+    cinfo.in_color_space = JCS_RGB;
+
+    jpeg_set_defaults(&cinfo);
+    jpeg_set_quality(&cinfo, quality, TRUE); // Set quality (0-100)
+
+    jpeg_start_compress(&cinfo, TRUE);
+
+    JSAMPROW row_pointer[1];
+    while (cinfo.next_scanline < cinfo.image_height) {
+        row_pointer[0] = const_cast<uint8_t*>(&imageData[cinfo.next_scanline * width * 3]);
+        jpeg_write_scanlines(&cinfo, row_pointer, 1);
+    }
+
+    jpeg_finish_compress(&cinfo);
+
+    // Copy the JPEG data to a std::vector<uint8_t>
+    std::vector<uint8_t> jpegData(jpegBuffer, jpegBuffer + jpegSize);
+
+    // Clean up
+    jpeg_destroy_compress(&cinfo);
+    free(jpegBuffer);
+
+    return jpegData;
 }

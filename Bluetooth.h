@@ -15,7 +15,7 @@
 
 enum DataType : uint8_t {
     IMAGE,
-    TEST
+    TEXT,
 };
 
 struct DataPacket {
@@ -45,9 +45,7 @@ public:
 
     std::unique_ptr<DataPacket> getReceivedData();
 
-    bool sendData(DataPacket data);
-
-    void sendImage(const std::vector<uint8_t>& bmpData);
+    void sendData(DataPacket data);
 
     bool isRunning();
 

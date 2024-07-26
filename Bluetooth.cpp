@@ -68,28 +68,51 @@ void Bluetooth::bluetoothServerTask() {
         is_client_connected = true;
 
         //Receive data
-        char buf[1024] = {0};
         while (is_client_connected) {
-            memset(buf, 0, sizeof(buf));
-            int bytes_read = recv(client_socket, buf, sizeof(buf), 0);
-            if (bytes_read > 0) {
-                spdlog::info("Bluetooth data received: {}", std::string(buf, bytes_read));
+            // Read DataType (1 byte)
+            uint8_t typeOrdinal;
+            if (recv(client_socket, &typeOrdinal, sizeof(typeOrdinal), 0) <= 0) {
+                spdlog::error("Bluetooth receive failed");
+                is_client_connected = false;
+                break;
+            }
+            DataType dataType = static_cast<DataType>(typeOrdinal);
 
+            // Read Size (4 bytes) little endian
+            uint32_t dataSize;
+            if (recv(client_socket, &dataSize, sizeof(dataSize), 0) <= 0) {
+                spdlog::error("Bluetooth receive failed");
+                is_client_connected = false;
+                break;
+            }
+
+            // Read Data
+            std::vector<uint8_t> data(dataSize);
+            size_t totalBytesReceived = 0;
+            while (totalBytesReceived < dataSize) {
+                ssize_t bytesReceived = recv(client_socket, data.data() + totalBytesReceived, dataSize - totalBytesReceived, 0);
+                if (bytesReceived <= 0) {
+                    spdlog::error("Failed to receive data");
+                    is_client_connected = false;
+                    break; // Return an empty DataPacket
+                }
+                totalBytesReceived += bytesReceived;
+            }
+
+            if (totalBytesReceived == dataSize) {
+                // Handle the received data
                 DataPacket dataPacket;
-                dataPacket.data = std::vector<uint8_t>(buf, buf + bytes_read);
-                dataPacket.dataSize = bytes_read;
                 dataPacket.type = DataType::IMAGE;
-
+                dataPacket.dataSize = dataSize;
+                dataPacket.data = data;
                 std::lock_guard<std::mutex> lock(receive_queue_mutex);
                 receive_queue.push(dataPacket);
-            } else if (bytes_read < 0) {
-                spdlog::warn("Bluetooth receive failed");
+            } else {
+                spdlog::error("Bluetooth incomplete read");
                 is_client_connected = false;
                 break;
             }
         }
-
-        is_client_connected = false;
     }
 
     // Close socket
@@ -107,43 +130,18 @@ std::unique_ptr<DataPacket> Bluetooth::getReceivedData(){
     return nullptr;
 }
 
-bool Bluetooth::sendData(DataPacket dataPacket){
-    /*if(is_running && is_client_connected){
-        spdlog::info("Sending data");
-
-        // Send data via Bluetooth
-        int bytes_sent = send(client_socket, dataPacket.data.data(), dataPacket.data.size(), 0);
-        if (bytes_sent < 0) {
-            spdlog::warn("Bluetooth send failed");
-            is_client_connected = false;
-            return false;
-        }
-    }*/
-
-    return true;
-}
-
-void printBytes(uint32_t value) {
-    unsigned char bytes[4];
-    bytes[0] = (value >> 0) & 0xFF;
-    bytes[1] = (value >> 8) & 0xFF;
-    bytes[2] = (value >> 16) & 0xFF;
-    bytes[3] = (value >> 24) & 0xFF;
-
-    spdlog::info("Bytes: {} {} {} {}", bytes[0], bytes[1], bytes[2], bytes[3]);
-}
-
-void Bluetooth::sendImage(const std::vector<uint8_t>& bmpData) {
-    DataPacket dataPacket;
-    dataPacket.type = DataType::TEST;
-    dataPacket.dataSize = bmpData.size();
-    spdlog::info("-------------{}-------------", dataPacket.type);
-    spdlog::info("-------------sizestorage: {}-------------", dataPacket.data.data());
-    dataPacket.data = bmpData;
-
-    send(client_socket, &dataPacket.type, sizeof(dataPacket.type), 0);
-    printBytes(dataPacket.dataSize);
-    send(client_socket, &dataPacket.dataSize, sizeof(dataPacket.dataSize), 0);
+void Bluetooth::sendData(DataPacket dataPacket) {
+    if(send(client_socket, &dataPacket.type, sizeof(dataPacket.type), 0) < 0){
+        spdlog::error("Failed to send data");
+        is_client_connected = false;
+        return;
+    }
+    
+    if(send(client_socket, &dataPacket.dataSize, sizeof(dataPacket.dataSize), 0) < 0){
+        spdlog::error("Failed to send data");
+        is_client_connected = false;
+        return;
+    }
 
     std::vector<unsigned char> buffer;
     buffer.insert(buffer.end(), dataPacket.data.begin(), dataPacket.data.end());
@@ -153,11 +151,11 @@ void Bluetooth::sendImage(const std::vector<uint8_t>& bmpData) {
         ssize_t bytesSent = send(client_socket, buffer.data() + totalBytesSent, bytesToSend, 0);
         if (bytesSent < 0) {
             spdlog::error("Failed to send data");
+            is_client_connected = false;
             return;
         }
         totalBytesSent += bytesSent;
     }
-    //send(client_socket, dataPacket.data.data(), dataPacket.dataSize, 0);
 }
 
 bool Bluetooth::isRunning(){

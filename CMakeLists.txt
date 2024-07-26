@@ -9,10 +9,11 @@ add_executable(dronezero main.cpp)
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 find_package(spdlog REQUIRED)
+find_package(JPEG REQUIRED)
 
 pkg_check_modules(BLUEZ REQUIRED bluez)
 
-include_directories(${BLUEZ_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
+include_directories(${BLUEZ_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} ${JPEG_INCLUDE_DIRS})
 
 target_sources(${PROJECT_NAME} PRIVATE
     UART.cpp
@@ -31,4 +32,5 @@ target_link_libraries(dronezero
     raspicam
     ${Boost_LIBRARIES}
     spdlog::spdlog
+    ${JPEG_LIBRARIES}
 )
