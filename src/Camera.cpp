@@ -7,11 +7,11 @@ Camera::~Camera() {
 }
 
 bool Camera::init() {
-    camera.setFormat(raspicam::RASPICAM_FORMAT_RGB);
+    camera.setFormat(raspicam::RASPICAM_FORMAT_BGR);
     camera.setCaptureSize(1280, 960);
 
     if (!camera.open()) {
-        spdlog::critical("Error opening camera");
+        spdlog::critical("Unable to open the camera");
         is_camera_connected = false;
         return false;
     }
@@ -26,13 +26,13 @@ bool Camera::IsConnected(){
 
 std::vector<uint8_t> Camera::captureImage() {
     if (!camera.isOpened()) {
-        spdlog::critical("Camera is not opened");
+        spdlog::error("Camera is not opened");
         is_camera_connected = false;
         return {};
     }
 
     if (!camera.grab()) {
-        spdlog::critical("Error capturing image");
+        spdlog::error("Capturing image");
         is_camera_connected = false;
         return {};
     }

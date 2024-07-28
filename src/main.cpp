@@ -42,14 +42,14 @@ void signal_handler(int signal) {
     }
 }
 
-void sendCaptureTask(Camera camera, Bluetooth bluetooth){
+void sendCaptureTask(Camera& camera, Bluetooth& bluetooth){
     size_t imageSize = camera.getImageBufferSize();
 
     std::vector<uint8_t> imageData = camera.captureImage();
 
     DataPacket dataPacket;
     dataPacket.type = DataType::IMAGE;
-    dataPacket.data = camera.convertToJpeg(imageData, camera.getWidth(), camera.getHeight(), 30);
+    dataPacket.data = camera.convertToJpeg(imageData, camera.getWidth(), camera.getHeight(), 1);
     dataPacket.dataSize = dataPacket.data.size();
 
     bluetooth.sendData(dataPacket);
@@ -71,10 +71,8 @@ int main() {
 
     spdlog::set_default_logger(logger);
 
-    spdlog::info("-------------START-------------");
-
     //Uart
-    UART uart("/dev/ttyS0", B230400);
+    UART uart("/dev/ttyS0", B460800);
 
     std::thread listenerThread(uartListenerTask, &uart);
 
@@ -88,9 +86,10 @@ int main() {
 
     //-------------------------------------------
     //Main loop
-
     int messageCount = 0;
     auto startTime = std::chrono::steady_clock::now();
+
+    spdlog::info("-------------START-------------");
     
     while (is_running) {
         //-------------------------------------------
@@ -107,7 +106,13 @@ int main() {
                         messageCount++;
                         break;
                     case MessageType::LogData:
-                        spdlog::info("Received data(pico): {}", received_message.data.log_data.message);
+                        if(received_message.data.log_data.type == LogType::LOG_INFO){
+                            spdlog::info("Received log(pico): {}", received_message.data.log_data.message);
+                        }else if(received_message.data.log_data.type == LogType::LOG_ERROR){
+                            spdlog::error("Received log(pico): {}", received_message.data.log_data.message);
+                        }else{
+                            spdlog::critical("Received log(pico): {}", received_message.data.log_data.message);
+                        }
                         break;
                 }
             }
@@ -117,16 +122,17 @@ int main() {
         //Handle new data from the bluetooth
         std::unique_ptr<DataPacket> new_received_data = bluetooth.getReceivedData();
         if(new_received_data){
-            spdlog::info("Received data(bluetooth): {}", std::string(new_received_data->data.begin(), new_received_data->data.end()));
-            spdlog::info("Received data size(bluetooth): {}", new_received_data->dataSize);
-            spdlog::info("Received data type(bluetooth): {}", new_received_data->type);
-
-            switch (new_received_data->type){
-                case DataType::TEXT:
+            switch (new_received_data->type) {
+                case IMAGE: {
+                    std::thread imageThread(sendCaptureTask, std::ref(camera), std::ref(bluetooth));
+                    imageThread.detach();
                     break;
-                default:
-                    break;
+                }
+                default: {
+                    spdlog::warn("Command not yet implemented");
+                }
             }
+            messageCount++;
         }
 
         //-------------------------------------------
@@ -138,17 +144,7 @@ int main() {
         auto currentTime = std::chrono::steady_clock::now();
         auto elapsedTime = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count();
         if (elapsedTime >= 1) {
-            if(bluetooth.isClientConnected()){
-                DataPacket dataPacket;
-                dataPacket.type = DataType::TEXT;
-                std::string strData = "";
-                dataPacket.data = std::vector<uint8_t>(strData.begin(), strData.end());
-
-                dataPacket.dataSize = dataPacket.data.size();
-
-                bluetooth.sendData(dataPacket);
-            } 
-            //std::cout << "Image taken(per s): "<< messageCount << std::endl;
+            std::cout << "Image taken(per s): "<< messageCount << std::endl;
             messageCount = 0;
             startTime = std::chrono::steady_clock::now();
         }

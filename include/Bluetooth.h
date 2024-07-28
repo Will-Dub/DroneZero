@@ -14,8 +14,14 @@
 #include <spdlog/spdlog.h>
 
 enum DataType : uint8_t {
-    IMAGE,
-    TEXT,
+    IMAGE, // Client sends, server respond
+    CONTROL, // Client sends
+    INFO, // Client sends, server respond
+    STATUS, // Client sends, server respond
+    LOG, // Client sends, server respond
+    SENSOR, // Client sends, server respond
+    STOP, //Client or server sends
+    TEST_TEXT,
 };
 
 struct DataPacket {

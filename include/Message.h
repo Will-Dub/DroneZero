@@ -48,8 +48,9 @@ struct SensorData {
 };
 
 enum LogType : uint8_t {
-    Error,
-    Info
+    LOG_INFO,
+    LOG_ERROR,
+    LOG_CRITICAL
 };
 
 struct LogData {

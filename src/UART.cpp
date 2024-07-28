@@ -3,7 +3,7 @@
 UART::UART(const char* device, int baud) : newDataReceived(false) {
     uart_filestream = open(device, O_RDWR | O_NOCTTY | O_NDELAY);
     if (uart_filestream == -1) {
-        std::cerr << "Error - Unable to open UART." << std::endl;
+        spdlog::critical("Unable to open UART");
     }
 
     struct termios options;
@@ -54,19 +54,6 @@ bool UART::isNewDataReceived() {
     std::lock_guard<std::mutex> lock(mtx);
     return newDataReceived;
 }
-
-/*std::vector<std::string> UART::getReceivedLines() {
-    std::vector<std::string> lines;
-    std::lock_guard<std::mutex> lock(mtx);
-
-    size_t pos = 0;
-    while ((pos = receivedData.find('\n')) != std::string::npos) {
-        lines.push_back(receivedData.substr(0, pos));
-        receivedData.erase(0, pos + 1);
-    }
-    newDataReceived = !receivedData.empty();
-    return lines;
-}*/
 
 std::optional<Message> UART::getReceivedMessage() {
     std::lock_guard<std::mutex> lock(mtx);
@@ -147,7 +134,7 @@ void UART::listenForData() {
             
             int select_result = select(uart_filestream + 1, &read_fds, NULL, NULL, &timeout);
             if (select_result == -1) {
-                std::cerr << "Error in select()" << std::endl;
+                spdlog::error("UART error during select");
                 continue;
             } else if (select_result == 0) {
                 // No data available, continue waiting

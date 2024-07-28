@@ -13,7 +13,8 @@
 #include <cstring>
 #include <optional>
 #include <iostream>
-#include <algorithm>	
+#include <algorithm>
+#include <spdlog/spdlog.h>
 
 #include "Message.h"
 

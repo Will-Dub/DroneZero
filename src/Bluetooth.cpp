@@ -35,9 +35,10 @@ void Bluetooth::bluetoothSendTask(int client_socket) {
 
         {
             std::unique_lock<std::mutex> lock(send_queue_mutex);
-            send_queue_condition.wait(lock, [this] { return !send_queue.empty() || !is_running; });
+            send_queue_condition.wait(lock, [this] { return !send_queue.empty() || !is_running || !is_client_connected; });
 
-            if (!is_running) {
+            if (!is_running || !is_client_connected) {
+                spdlog::info("Send task stopped");
                 break;
             }
 
@@ -182,7 +183,7 @@ void Bluetooth::bluetoothServerTask() {
         }
 
         //Stop the send thread
-        send_queue_condition.notify_all();
+        send_queue_condition.notify_one();
         send_thread.join();
 
         //Clear the send queue
