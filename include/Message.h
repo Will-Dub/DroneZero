@@ -38,7 +38,7 @@ struct SensorData {
     float gyro_x, gyro_y, gyro_z;
     int16_t mag_x, mag_y, mag_z;
     float pitch, roll, yaw;
-    double gps_latitude, gps_longitude, gps_altitude;
+    double gps_latitude, gps_longitude, gps_altitude, gps_kmph, gps_course_deg;
     float baro_pressure, baro_temperature;
 
     float battery_voltage, battery_current;
@@ -154,7 +154,7 @@ struct Message {
         uint16_t calculated_checksum = calculateChecksum(buffer + 3, message_length);
         if (checksum != calculated_checksum) return false;
 
-        memcpy(&type, buffer + 3, sizeof(uint8_t));
+        type = static_cast<MessageType>(*(buffer + 3));
 
         size_t data_size = 0;
         switch (type) {

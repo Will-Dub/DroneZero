@@ -42,18 +42,33 @@ void signal_handler(int signal) {
     }
 }
 
-void sendCaptureTask(Camera& camera, Bluetooth& bluetooth){
+void sendCaptureTask(Camera& camera, Bluetooth& bluetooth, int quality){
+    if(quality > 100 || quality < 0){
+        return;
+    }
+
     size_t imageSize = camera.getImageBufferSize();
 
     std::vector<uint8_t> imageData = camera.captureImage();
 
     DataPacket dataPacket;
     dataPacket.type = DataType::IMAGE;
-    dataPacket.data = camera.convertToJpeg(imageData, camera.getWidth(), camera.getHeight(), 1);
+    dataPacket.data = camera.convertToJpeg(imageData, camera.getWidth(), camera.getHeight(), quality);
     dataPacket.dataSize = dataPacket.data.size();
 
     bluetooth.sendData(dataPacket);
     return;
+}
+
+std::vector<uint8_t> stringToVector(const std::string& str) {
+    std::vector<uint8_t> byteVector;
+    byteVector.reserve(str.size());
+
+    for (char c : str) {
+        byteVector.push_back(static_cast<uint8_t>(c));
+    }
+
+    return byteVector;
 }
 
 int main() {
@@ -72,7 +87,7 @@ int main() {
     spdlog::set_default_logger(logger);
 
     //Uart
-    UART uart("/dev/ttyS0", B460800);
+    UART uart("/dev/ttyS0", B230400);
 
     std::thread listenerThread(uartListenerTask, &uart);
 
@@ -86,6 +101,8 @@ int main() {
 
     //-------------------------------------------
     //Main loop
+    std::unique_ptr<SensorData> latestSensorData = std::make_unique<SensorData>();
+
     int messageCount = 0;
     auto startTime = std::chrono::steady_clock::now();
 
@@ -102,7 +119,11 @@ int main() {
                 //Handle new message
                 switch(received_message.type){
                     case MessageType::SensorData:
-                        //std::cout << "I2C: " << received_message_opt.value().data.sensor_data.i2c_connected << std::endl;
+                        if(latestSensorData){
+                            *latestSensorData = received_message_opt.value().data.sensor_data;
+                            std::cout << "Long: " << latestSensorData->gps_longitude << " Lat: " << latestSensorData->gps_latitude << " Alt: " << latestSensorData->gps_altitude << std::endl;
+                        }
+
                         messageCount++;
                         break;
                     case MessageType::LogData:
@@ -122,10 +143,41 @@ int main() {
         //Handle new data from the bluetooth
         std::unique_ptr<DataPacket> new_received_data = bluetooth.getReceivedData();
         if(new_received_data){
+            std::string data_str(new_received_data->data.begin(), new_received_data->data.end());
             switch (new_received_data->type) {
                 case IMAGE: {
-                    std::thread imageThread(sendCaptureTask, std::ref(camera), std::ref(bluetooth));
+                    int received_int = 10;
+                    if (new_received_data->data.size() >= 1) {
+                        try {
+                            received_int = std::stoi(data_str);
+                        } catch (const std::exception& e) {
+                            spdlog::error("Error converting int");
+                        }
+                    }
+
+                    std::thread imageThread(sendCaptureTask, std::ref(camera), std::ref(bluetooth), received_int);
                     imageThread.detach();
+                    break;
+                }
+                case GPS: {
+                    if(!latestSensorData){
+                        break;
+                    }
+                    
+                    std::ostringstream oss;
+                    oss << latestSensorData->gps_latitude << ",";
+                    oss << latestSensorData->gps_longitude << ",";
+                    oss << latestSensorData->gps_altitude << ",";
+                    oss << latestSensorData->gps_kmph << ",";
+                    oss << latestSensorData->gps_course_deg;
+                    std::string dataStr = oss.str();
+                    std::vector<uint8_t> dataVector = stringToVector(dataStr);
+
+                    DataPacket dataPacket;
+                    dataPacket.type = DataType::GPS;
+                    dataPacket.data = dataVector;
+                    dataPacket.dataSize = dataPacket.data.size();
+                    bluetooth.sendData(dataPacket);
                     break;
                 }
                 default: {

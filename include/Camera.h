@@ -38,7 +38,6 @@ public:
     bool init();
     std::vector<unsigned char> captureImage();
     bool IsConnected();
-    void captureImage(std::vector<uint8_t>& imageData, size_t& imageSize);
     std::vector<uint8_t> convertToBMP(const std::vector<uint8_t>& imageData, int width, int height);
     std::vector<uint8_t> convertToJpeg(const std::vector<uint8_t>& imageData, int width, int height, int quality);
     int getWidth();

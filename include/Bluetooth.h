@@ -20,8 +20,9 @@ enum DataType : uint8_t {
     STATUS, // Client sends, server respond
     LOG, // Client sends, server respond
     SENSOR, // Client sends, server respond
+    GPS,  // Client sends, server respond
     STOP, //Client or server sends
-    TEST_TEXT,
+    TEST,
 };
 
 struct DataPacket {
