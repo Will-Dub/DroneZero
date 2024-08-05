@@ -1,7 +1,8 @@
 How to set it up:
 
 1. Download legacy 32bit raspbian os minimal on a raspberry pi zero 2w
-2. Install all library (commands to come)
+2. Install all library. 
+Command: sudo apt-get install git g++ make cmake libspdlog-dev build-essential cmake libopencv-dev bluez libbluetooth-dev -y
 3. Open raspi-config '''Sudo raspi-config'''
 4. Enable legacy camera in interface options
 5. Enable UART(no for auth and then yes for uart) in interface options
