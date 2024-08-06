@@ -21,7 +21,7 @@ void Bluetooth::startServer() {
 * Stop all bluetooth thread
 */
 void Bluetooth::stop() {
-    is_running = false;
+    is_running.store(false);
     send_queue_condition.notify_all();
     clearSendQueue();
 }
@@ -30,14 +30,14 @@ void Bluetooth::stop() {
 * Task that handle sending data
 */
 void Bluetooth::bluetoothSendTask(int client_socket) {
-    while (is_running && is_client_connected) {
+    while (is_running.load() && is_client_connected.load()) {
         DataPacket dataPacket;
 
         {
             std::unique_lock<std::mutex> lock(send_queue_mutex);
             send_queue_condition.wait(lock, [this] { return !send_queue.empty() || !is_running || !is_client_connected; });
 
-            if (!is_running || !is_client_connected) {
+            if (!is_running.load() || !is_client_connected.load()) {
                 spdlog::info("Send task stopped");
                 break;
             }
@@ -48,22 +48,22 @@ void Bluetooth::bluetoothSendTask(int client_socket) {
 
             dataPacket = send_queue.front();
             send_queue.pop();
-        }
 
-        spdlog::info("Sending data, remaining: {}", send_queue.size());
+            spdlog::info("Sending data, remaining: {}", send_queue.size());
+        }
 
         // Send the data
         //Send the type(1 byte)
         if(send(client_socket, &dataPacket.type, sizeof(dataPacket.type), 0) < 0){
             spdlog::error("Failed to send data");
-            is_client_connected = false;
+            is_client_connected.store(false);
             return;
         }
         
         //Send the size(4 byte)
         if(send(client_socket, &dataPacket.dataSize, sizeof(dataPacket.dataSize), 0) < 0){
             spdlog::error("Failed to send data");
-            is_client_connected = false;
+            is_client_connected.store(false);
             return;
         }
 
@@ -76,7 +76,7 @@ void Bluetooth::bluetoothSendTask(int client_socket) {
             ssize_t bytesSent = send(client_socket, data.data() + totalBytesSent, bytesToSend, 0);
             if (bytesSent < 0) {
                 spdlog::error("Failed to send data");
-                is_client_connected = false;
+                is_client_connected.store(false);
                 return;
             }
             totalBytesSent += bytesSent;
@@ -118,7 +118,7 @@ void Bluetooth::bluetoothServerTask() {
     }
 
     // Main loop
-    while (is_running) {
+    while (is_running.load()) {
         // Accept connection
         client_socket = accept(server_socket, (struct sockaddr *)&rem_addr, &opt);
         if (client_socket < 0) {
@@ -131,26 +131,26 @@ void Bluetooth::bluetoothServerTask() {
         spdlog::info("New bluetooth connection from {}", addr_str);
 
         // Set client as connected
-        is_client_connected = true;
+        is_client_connected.store(true);
 
         std::thread send_thread(&Bluetooth::bluetoothSendTask, this, client_socket);
 
         //Receive data
-        while (is_client_connected) {
+        while (is_client_connected.load()) {
             // Read DataType (1 byte)
             uint8_t typeOrdinal;
-            if (recv(client_socket, &typeOrdinal, sizeof(typeOrdinal), 0) <= 0) {
-                spdlog::error("Bluetooth receive failed");
-                is_client_connected = false;
+            ssize_t bytesReceived = recv(client_socket, &typeOrdinal, sizeof(typeOrdinal), 0);
+            if (bytesReceived <= 0) {
+                spdlog::error("Failed to receive data. Bytes received: {}", bytesReceived);
                 break;
             }
             DataType dataType = static_cast<DataType>(typeOrdinal);
 
             // Read Size (4 bytes) little endian
             uint32_t dataSize;
-            if (recv(client_socket, &dataSize, sizeof(dataSize), 0) <= 0) {
-                spdlog::error("Bluetooth receive failed");
-                is_client_connected = false;
+            bytesReceived = recv(client_socket, &dataSize, sizeof(dataSize), 0);
+            if (bytesReceived <= 0) {
+                spdlog::error("Failed to receive data. Bytes received: {}", bytesReceived);
                 break;
             }
 
@@ -158,10 +158,9 @@ void Bluetooth::bluetoothServerTask() {
             std::vector<uint8_t> data(dataSize);
             size_t totalBytesReceived = 0;
             while (totalBytesReceived < dataSize) {
-                ssize_t bytesReceived = recv(client_socket, data.data() + totalBytesReceived, dataSize - totalBytesReceived, 0);
+                bytesReceived = recv(client_socket, data.data() + totalBytesReceived, dataSize - totalBytesReceived, 0);
                 if (bytesReceived <= 0) {
-                    spdlog::error("Failed to receive data");
-                    is_client_connected = false;
+                    spdlog::error("Failed to receive data. Bytes received: {}", bytesReceived);
                     break;
                 }
                 totalBytesReceived += bytesReceived;
@@ -173,14 +172,20 @@ void Bluetooth::bluetoothServerTask() {
                 dataPacket.type = dataType;
                 dataPacket.dataSize = dataSize;
                 dataPacket.data = data;
-                std::lock_guard<std::mutex> lock(receive_queue_mutex);
-                receive_queue.push(dataPacket);
+                {
+                    std::lock_guard<std::mutex> lock(receive_queue_mutex);
+                    receive_queue.push(dataPacket);
+                }
             } else {
-                spdlog::error("Bluetooth incomplete read");
-                is_client_connected = false;
+                spdlog::error("Incomplete data read. Expected: {}, received: {}", dataSize, totalBytesReceived);
                 break;
             }
         }
+
+        is_client_connected.store(false);
+        close(client_socket);
+
+        spdlog::info("Connection closed or error occurred. Cleaning up.");
 
         //Stop the send thread
         send_queue_condition.notify_one();
@@ -212,7 +217,7 @@ std::unique_ptr<DataPacket> Bluetooth::getReceivedData(){
 * Sends a datapacket to the client
 */
 void Bluetooth::sendData(DataPacket dataPacket){
-    if(is_client_connected){
+    if(is_client_connected.load()){
         {
             std::lock_guard<std::mutex> lock(send_queue_mutex);
             send_queue.push(dataPacket);
@@ -227,14 +232,14 @@ void Bluetooth::sendData(DataPacket dataPacket){
 * Return if the bluetooth thread is running
 */
 bool Bluetooth::isRunning(){
-    return is_running;
+    return is_running.load();
 }
 
 /*
 * Returns if a client is connected
 */
 bool Bluetooth::isClientConnected(){
-    return is_client_connected;
+    return is_client_connected.load();
 }
 
 /*
