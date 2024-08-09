@@ -35,14 +35,14 @@ class Camera {
 public:
     Camera();
     ~Camera();
-    bool init();
     std::vector<unsigned char> captureImage();
-    bool IsConnected();
     std::vector<uint8_t> convertToBMP(const std::vector<uint8_t>& imageData, int width, int height);
     std::vector<uint8_t> convertToJpeg(const std::vector<uint8_t>& imageData, int width, int height, int quality);
     int getWidth();
     int getHeight();
     int getImageBufferSize();
+    bool init();
+    bool IsConnected();
 
 private:
     raspicam::RaspiCam camera;

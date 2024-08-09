@@ -60,17 +60,6 @@ void sendCaptureTask(Camera& camera, Bluetooth& bluetooth, int quality){
     return;
 }
 
-std::vector<uint8_t> stringToVector(const std::string& str) {
-    std::vector<uint8_t> byteVector;
-    byteVector.reserve(str.size());
-
-    for (char c : str) {
-        byteVector.push_back(static_cast<uint8_t>(c));
-    }
-
-    return byteVector;
-}
-
 int main() {
     signal(SIGINT, signal_handler);
 
@@ -101,7 +90,7 @@ int main() {
 
     //-------------------------------------------
     //Main loop
-    std::unique_ptr<SensorData> latestSensorData = std::make_unique<SensorData>();
+    std::unique_ptr<PositionData> latestPositionData = std::make_unique<PositionData>();
 
     int messageCount = 0;
     auto startTime = std::chrono::steady_clock::now();
@@ -118,13 +107,14 @@ int main() {
                 Message received_message = received_message_opt.value();
                 //Handle new message
                 switch(received_message.type){
+                    case MessageType::PositionData:
+                        *latestPositionData = received_message_opt.value().data.position_data;
+                        std::cout << "Long: " << latestPositionData->gps_longitude << " Lat: " << latestPositionData->gps_latitude << " Alt: " << latestPositionData->gps_altitude << std::endl;
+                        break;
                     case MessageType::SensorData:
-                        if(latestSensorData){
-                            *latestSensorData = received_message_opt.value().data.sensor_data;
-                            std::cout << "Long: " << latestSensorData->gps_longitude << " Lat: " << latestSensorData->gps_latitude << " Alt: " << latestSensorData->gps_altitude << std::endl;
-                        }
-
-                        messageCount++;
+                        std::cout << "Accel x: " << received_message.data.sensor_data.accel_x << " Accel y: " << received_message.data.sensor_data.accel_y << " Accel z: " << received_message.data.sensor_data.accel_z << std::endl;
+                        std::cout << "Gyro x: " << received_message.data.sensor_data.gyro_x << " Gyro y: " << received_message.data.sensor_data.gyro_y << " Gyro z: " << received_message.data.sensor_data.gyro_z << std::endl;
+                        std::cout << "Mag x: " << received_message.data.sensor_data.mag_x << " Mag y: " << received_message.data.sensor_data.mag_x << " Mag z: " << received_message.data.sensor_data.mag_z << std::endl;
                         break;
                     case MessageType::LogData:
                         if(received_message.data.log_data.type == LogType::LOG_INFO){
@@ -160,18 +150,18 @@ int main() {
                     break;
                 }
                 case GPS: {
-                    if(!latestSensorData){
+                    if(!latestPositionData){
                         break;
                     }
                     
                     std::ostringstream oss;
-                    oss << latestSensorData->gps_latitude << ",";
-                    oss << latestSensorData->gps_longitude << ",";
-                    oss << latestSensorData->gps_altitude << ",";
-                    oss << latestSensorData->gps_kmph << ",";
-                    oss << latestSensorData->gps_course_deg;
+                    oss << latestPositionData->gps_latitude << ",";
+                    oss << latestPositionData->gps_longitude << ",";
+                    oss << latestPositionData->gps_altitude << ",";
+                    oss << latestPositionData->gps_kmph << ",";
+                    oss << latestPositionData->gps_course_deg;
                     std::string dataStr = oss.str();
-                    std::vector<uint8_t> dataVector = stringToVector(dataStr);
+                    std::vector<uint8_t> dataVector = bluetooth.stringToVector(dataStr);
 
                     DataPacket dataPacket;
                     dataPacket.type = DataType::GPS;
@@ -195,8 +185,8 @@ int main() {
         //Calculate message per seconds
         auto currentTime = std::chrono::steady_clock::now();
         auto elapsedTime = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count();
-        if (elapsedTime >= 1) {
-            std::cout << "Image taken(per s): "<< messageCount << std::endl;
+        if (elapsedTime >= 5) {
+            std::cout << "Message taken(per 5s): "<< messageCount << std::endl;
             messageCount = 0;
             startTime = std::chrono::steady_clock::now();
         }

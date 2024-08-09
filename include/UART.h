@@ -30,19 +30,19 @@ public:
 
     ~UART();
 
-    int write(const std::string& data);
-
     void flush();
-
-    bool isNewDataReceived();
 
     std::vector<std::string> getReceivedLines();
 
-    int writeMessage(const Message &message);
-
     std::optional<Message> getReceivedMessage();
 
+    bool isNewDataReceived();
+
     void listenForData();
+
+    int write(const std::string& data);
+
+    int writeMessage(const Message &message);
 };
 
 #endif

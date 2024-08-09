@@ -251,3 +251,17 @@ void Bluetooth::clearSendQueue() {
         send_queue.pop();
     }
 }
+
+/**
+ * Convert a string to a vector of uint
+ */
+std::vector<uint8_t> Bluetooth::stringToVector(const std::string& str) {
+    std::vector<uint8_t> byteVector;
+    byteVector.reserve(str.size());
+
+    for (char c : str) {
+        byteVector.push_back(static_cast<uint8_t>(c));
+    }
+
+    return byteVector;
+}

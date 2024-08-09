@@ -7,8 +7,22 @@
 
 // Message types
 enum class MessageType {
+    ControlData,
+    ModeData,
+    PositionData,
+    RequestData,
+    StatusData,
     SensorData,
     LogData,
+};
+
+//-----------------------------
+//All enum used by message type
+
+enum LogType : uint8_t {
+    LOG_INFO,
+    LOG_ERROR,
+    LOG_CRITICAL
 };
 
 // Flight mode enumeration
@@ -19,44 +33,56 @@ enum FlightMode {
     AUTO
 };
 
-struct FlightControllerData {
-    // Configuration data
-    float pid_kp, pid_ki, pid_kd;
-
-    // State information
-    FlightMode mode;
-    bool fail_safe_triggered;
-
-    // Control parameters
-    float desired_pitch, desired_roll, desired_yaw;
-    uint16_t motor_pwm[4];
+enum RequestType {
+    STATUS_REQUEST,
+    POSITION_REQUEST,
+    MODE_REQUEST,
+    CONTROL_REQUEST,
+    SENSOR_REQUEST,
 };
 
-struct SensorData {
-    // Sensor data
-    float accel_x, accel_y, accel_z;
-    float gyro_x, gyro_y, gyro_z;
-    int16_t mag_x, mag_y, mag_z;
-    float pitch, roll, yaw;
-    double gps_latitude, gps_longitude, gps_altitude, gps_kmph, gps_course_deg;
-    float baro_pressure, baro_temperature;
-
-    float battery_voltage, battery_current;
-
-    // Status flags
-    bool uart_zero_connected, uart_gps_connected, i2c_connected;
-};
-
-enum LogType : uint8_t {
-    LOG_INFO,
-    LOG_ERROR,
-    LOG_CRITICAL
+//-----------------------------
+//All message type
+struct ControlData {
+    //Each motor control
+    uint8_t motor_pwm[4];
 };
 
 struct LogData {
     // Log data
     LogType type;
     char message[30];
+};
+
+struct ModeData {
+    // State information
+    FlightMode mode;
+    bool fail_safe_triggered;
+    double desired_latitude, desired_longitude, desired_altitude, desired_speed;
+
+    // Control parameters
+    float desired_pitch, desired_roll, desired_yaw;
+};
+
+struct PositionData {
+    double gps_latitude, gps_longitude, gps_altitude, gps_kmph, gps_course_deg;
+};
+
+struct RequestData{
+    RequestType requestType;
+};
+
+struct StatusData {
+    bool uart_zero_connected, uart_gps_connected, i2c_connected;
+
+    bool use_mpu6050, use_qmc5883l, use_gps, use_log;
+};
+
+struct SensorData {
+    float accel_x, accel_y, accel_z;
+    float gyro_x, gyro_y, gyro_z;
+    int16_t mag_x, mag_y, mag_z;
+    float pitch, roll, yaw;
 };
 
 // Unified message structure
@@ -86,9 +112,13 @@ struct Message {
     MessageType type;
 
     union {
-        SensorData sensor_data;
+        ControlData control_data;
         LogData log_data;
-        // Add other data structures here
+        ModeData mode_data;
+        PositionData position_data;
+        RequestData request_data;
+        StatusData status_data;
+        SensorData sensor_data;
     } data;
 
     uint16_t calculateChecksum(const uint8_t* data, size_t length) const {
@@ -103,13 +133,27 @@ struct Message {
         size_t data_size = 0;
 
         switch (type) {
-            case MessageType::SensorData:
-                data_size = sizeof(SensorData);
+            case MessageType::ControlData:
+                data_size = sizeof(ControlData);
                 break;
             case MessageType::LogData:
                 data_size = sizeof(LogData);
                 break;
-            // Handle other message types here
+            case MessageType::ModeData:
+                data_size = sizeof(ModeData);
+                break;
+            case MessageType::PositionData:
+                data_size = sizeof(PositionData);
+                break;
+            case MessageType::RequestData:
+                data_size = sizeof(RequestData);
+                break;
+            case MessageType::StatusData:
+                data_size = sizeof(StatusData);
+                break;
+            case MessageType::SensorData:
+                data_size = sizeof(SensorData);
+                break;
         }
 
         if (buffer_size < 7 + data_size) return 0;
@@ -158,11 +202,26 @@ struct Message {
 
         size_t data_size = 0;
         switch (type) {
-            case MessageType::SensorData:
-                data_size = sizeof(SensorData);
+            case MessageType::ControlData:
+                data_size = sizeof(ControlData);
                 break;
             case MessageType::LogData:
                 data_size = sizeof(LogData);
+                break;
+            case MessageType::ModeData:
+                data_size = sizeof(ModeData);
+                break;
+            case MessageType::PositionData:
+                data_size = sizeof(PositionData);
+                break;
+            case MessageType::RequestData:
+                data_size = sizeof(RequestData);
+                break;
+            case MessageType::StatusData:
+                data_size = sizeof(StatusData);
+                break;
+            case MessageType::SensorData:
+                data_size = sizeof(SensorData);
                 break;
         }
 

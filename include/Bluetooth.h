@@ -54,19 +54,21 @@ public:
 
     ~Bluetooth();
 
+    void clearSendQueue();
+
+    std::unique_ptr<DataPacket> getReceivedData();
+
+    bool isClientConnected();
+    
+    bool isRunning();
+
+    void sendData(DataPacket dataPacket);
+
     void startServer();
 
     void stop();
 
-    std::unique_ptr<DataPacket> getReceivedData();
-
-    void sendData(DataPacket dataPacket);
-
-    bool isRunning();
-
-    bool isClientConnected();
-
-    void clearSendQueue();
+    std::vector<uint8_t> stringToVector(const std::string& str);
 };
 
 #endif
