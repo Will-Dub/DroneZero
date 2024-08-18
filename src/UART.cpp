@@ -58,19 +58,17 @@ bool UART::isNewDataReceived() {
 std::optional<Message> UART::getReceivedMessage() {
     std::lock_guard<std::mutex> lock(mtx);
 
-    const size_t MAX_BUFFER_SIZE = 2000; // Maximum size of received_data buffer
-
-    while (received_data.size() >= 6) {
+    while (receivedData.size() >= 6) {
         // Find the start marker
-        auto start_it = std::find(received_data.begin(), received_data.end(), Message::START_MARKER);
-        if (start_it == received_data.end()) {
+        auto start_it = std::find(receivedData.begin(), receivedData.end(), Message::START_MARKER);
+        if (start_it == receivedData.end()) {
             // No start marker found, clear all data if incomplete message
-            received_data.clear();
+            receivedData.clear();
             return std::nullopt;
         }
 
         // Calculate the remaining data after the start marker
-        size_t remaining_data = std::distance(start_it, received_data.end());
+        size_t remaining_data = std::distance(start_it, receivedData.end());
         if (remaining_data < 6) {  // Minimum size check
             return std::nullopt;
         }
@@ -82,8 +80,8 @@ std::optional<Message> UART::getReceivedMessage() {
         //Verify message length is in the range
         if (message_length > MAX_BUFFER_SIZE) {
             // Message size exceeds buffer limit, discard all data
-            auto next_start_it = std::find(start_it + 1, received_data.end(), Message::START_MARKER);
-            received_data.erase(received_data.begin(), next_start_it);
+            auto next_start_it = std::find(start_it + 1, receivedData.end(), Message::START_MARKER);
+            receivedData.erase(receivedData.begin(), next_start_it);
             return std::nullopt;
         }
 
@@ -97,11 +95,11 @@ std::optional<Message> UART::getReceivedMessage() {
         auto end_it = start_it + total_message_size - 1; // Adjust for inclusive end marker check
         if (*end_it != Message::END_MARKER) {
             // Invalid end marker, discard data up to next start marker
-            auto next_start_it = std::find(start_it + 1, received_data.end(), Message::START_MARKER);
-            if (next_start_it != received_data.end()) {
-                received_data.erase(received_data.begin(), next_start_it); // Discard up to next start marker
+            auto next_start_it = std::find(start_it + 1, receivedData.end(), Message::START_MARKER);
+            if (next_start_it != receivedData.end()) {
+                receivedData.erase(receivedData.begin(), next_start_it); // Discard up to next start marker
             } else {
-                received_data.clear(); // No more start marker found, clear all data
+                receivedData.clear(); // No more start marker found, clear all data
             }
             return std::nullopt;
         }
@@ -110,10 +108,10 @@ std::optional<Message> UART::getReceivedMessage() {
         std::vector<uint8_t> buffer(start_it, end_it + 1);
         Message message;
         if (message.deserialize(buffer.data(), buffer.size())) {
-            received_data.erase(received_data.begin(), end_it + 1); // Remove the processed message including the end marker
+            receivedData.erase(receivedData.begin(), end_it + 1); // Remove the processed message including the end marker
             return message;
         } else {
-            received_data.erase(received_data.begin(), start_it + 1); // Move past the invalid start marker
+            receivedData.erase(receivedData.begin(), start_it + 1); // Move past the invalid start marker
         }
     }
 
@@ -145,7 +143,7 @@ void UART::listenForData() {
             int length = read(uart_filestream, buffer, sizeof(buffer));
             if (length > 0) {
                 std::lock_guard<std::mutex> lock(mtx);
-                received_data.insert(received_data.end(), buffer, buffer + length);
+                receivedData.insert(receivedData.end(), buffer, buffer + length);
                 newDataReceived = true;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));

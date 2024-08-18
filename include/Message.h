@@ -57,15 +57,15 @@ struct LogData {
 struct ModeData {
     // State information
     FlightMode mode;
-    bool fail_safe_triggered;
-    double desired_latitude, desired_longitude, desired_altitude, desired_speed;
+    bool failSafeTriggered;
+    double desiredLatitude, desiredLongitude, desiredAltitude, desiredSpeed;
 
     // Control parameters
-    float desired_pitch, desired_roll, desired_yaw;
+    float desiredPitch, desiredRoll, desiredYaw;
 };
 
 struct PositionData {
-    double gps_latitude, gps_longitude, gps_altitude, gps_kmph, gps_course_deg;
+    double gpsLatitude, gpsLongitude, gpsAltitude, gpsKmph, gpsCourseDeg;
 };
 
 struct RequestData{
@@ -73,15 +73,15 @@ struct RequestData{
 };
 
 struct StatusData {
-    bool uart_zero_connected, uart_gps_connected, i2c_connected;
+    bool uartZeroConnected, uartGpsConnected, i2cConnected;
 
-    bool use_mpu6050, use_qmc5883l, use_gps, use_log;
+    bool useMpu6050, useQmc5883l, useGps, useLog;
 };
 
 struct SensorData {
-    float accel_x, accel_y, accel_z;
-    float gyro_x, gyro_y, gyro_z;
-    int16_t mag_x, mag_y, mag_z;
+    float accelX, accelY, accelZ;
+    float gyroX, gyroY, gyroZ;
+    int16_t magX, magY, magZ;
     float pitch, roll, yaw;
 };
 
@@ -112,13 +112,13 @@ struct Message {
     MessageType type;
 
     union {
-        ControlData control_data;
-        LogData log_data;
-        ModeData mode_data;
-        PositionData position_data;
-        RequestData request_data;
-        StatusData status_data;
-        SensorData sensor_data;
+        ControlData controlData;
+        LogData logData;
+        ModeData modeData;
+        PositionData positionData;
+        RequestData requestData;
+        StatusData statusData;
+        SensorData sensorData;
     } data;
 
     uint16_t calculateChecksum(const uint8_t* data, size_t length) const {
@@ -130,102 +130,102 @@ struct Message {
     }
 
     size_t serialize(uint8_t* buffer, size_t buffer_size) const {
-        size_t data_size = 0;
+        size_t dataSize = 0;
 
         switch (type) {
             case MessageType::ControlData:
-                data_size = sizeof(ControlData);
+                dataSize = sizeof(ControlData);
                 break;
             case MessageType::LogData:
-                data_size = sizeof(LogData);
+                dataSize = sizeof(LogData);
                 break;
             case MessageType::ModeData:
-                data_size = sizeof(ModeData);
+                dataSize = sizeof(ModeData);
                 break;
             case MessageType::PositionData:
-                data_size = sizeof(PositionData);
+                dataSize = sizeof(PositionData);
                 break;
             case MessageType::RequestData:
-                data_size = sizeof(RequestData);
+                dataSize = sizeof(RequestData);
                 break;
             case MessageType::StatusData:
-                data_size = sizeof(StatusData);
+                dataSize = sizeof(StatusData);
                 break;
             case MessageType::SensorData:
-                data_size = sizeof(SensorData);
+                dataSize = sizeof(SensorData);
                 break;
         }
 
-        if (buffer_size < 7 + data_size) return 0;
+        if (buffer_size < 7 + dataSize) return 0;
 
         // Byte 0
         buffer[0] = START_MARKER;
 
         // Calculate message length (type + data size)
-        uint16_t message_length = sizeof(uint8_t) + data_size;
+        uint16_t messageLength = sizeof(uint8_t) + dataSize;
 
         // Bytes 1-2
-        memcpy(buffer + 1, &message_length, sizeof(uint16_t));
+        memcpy(buffer + 1, &messageLength, sizeof(uint16_t));
 
         // Byte 3
         buffer[3] = static_cast<uint8_t>(type);
 
-        // Bytes 4-(3+data_size)
-        memcpy(buffer + 4, &data, data_size);
+        // Bytes 4-(3+dataSize)
+        memcpy(buffer + 4, &data, dataSize);
 
-        uint16_t checksum = calculateChecksum(buffer + 3, message_length);
+        uint16_t checksum = calculateChecksum(buffer + 3, messageLength);
 
-        // Bytes (4+data_size)-(5+data_size)
-        memcpy(buffer + 4 + data_size, &checksum, sizeof(uint16_t));
+        // Bytes (4+dataSize)-(5+dataSize)
+        memcpy(buffer + 4 + dataSize, &checksum, sizeof(uint16_t));
 
-        // Byte (6+data_size)
-        buffer[6 + data_size] = END_MARKER;
+        // Byte (6+dataSize)
+        buffer[6 + dataSize] = END_MARKER;
 
-        return 7 + data_size;
+        return 7 + dataSize;
     }
 
     bool deserialize(const uint8_t* buffer, size_t buffer_size) {
         if (buffer[0] != START_MARKER || buffer[buffer_size - 1] != END_MARKER) return false;
 
-        uint16_t message_length;
-        memcpy(&message_length, buffer + 1, sizeof(uint16_t));
+        uint16_t messageLength;
+        memcpy(&messageLength, buffer + 1, sizeof(uint16_t));
 
-        if (buffer_size < 6 + message_length) return false;
+        if (buffer_size < 6 + messageLength) return false;
 
         uint16_t checksum;
-        memcpy(&checksum, buffer + 3 + message_length, sizeof(uint16_t));
+        memcpy(&checksum, buffer + 3 + messageLength, sizeof(uint16_t));
 
-        uint16_t calculated_checksum = calculateChecksum(buffer + 3, message_length);
+        uint16_t calculated_checksum = calculateChecksum(buffer + 3, messageLength);
         if (checksum != calculated_checksum) return false;
 
         type = static_cast<MessageType>(*(buffer + 3));
 
-        size_t data_size = 0;
+        size_t dataSize = 0;
         switch (type) {
             case MessageType::ControlData:
-                data_size = sizeof(ControlData);
+                dataSize = sizeof(ControlData);
                 break;
             case MessageType::LogData:
-                data_size = sizeof(LogData);
+                dataSize = sizeof(LogData);
                 break;
             case MessageType::ModeData:
-                data_size = sizeof(ModeData);
+                dataSize = sizeof(ModeData);
                 break;
             case MessageType::PositionData:
-                data_size = sizeof(PositionData);
+                dataSize = sizeof(PositionData);
                 break;
             case MessageType::RequestData:
-                data_size = sizeof(RequestData);
+                dataSize = sizeof(RequestData);
                 break;
             case MessageType::StatusData:
-                data_size = sizeof(StatusData);
+                dataSize = sizeof(StatusData);
                 break;
             case MessageType::SensorData:
-                data_size = sizeof(SensorData);
+                dataSize = sizeof(SensorData);
                 break;
         }
 
-        memcpy(&data, buffer + 4, data_size);
+        memcpy(&data, buffer + 4, dataSize);
 
         return true;
     }

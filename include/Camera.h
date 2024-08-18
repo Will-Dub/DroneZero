@@ -46,7 +46,7 @@ public:
 
 private:
     raspicam::RaspiCam camera;
-    bool is_camera_connected;
+    bool isCameraConnected;
 };
 
 #endif

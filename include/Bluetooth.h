@@ -36,18 +36,18 @@ private:
     void bluetoothServerTask();
     void bluetoothSendTask(int client_socket);
 
-    std::atomic<bool> is_running;
-    std::atomic<bool> is_client_connected;
-    int client_socket;
+    std::atomic<bool> isRunning;
+    std::atomic<bool> isClientConnected;
+    int clientSocket;
 
     //Receive
-    std::queue<DataPacket> receive_queue;
-    std::mutex receive_queue_mutex;
+    std::queue<DataPacket> receiveQueue;
+    std::mutex receiveQueueMutex;
 
     //Send
-    std::queue<DataPacket> send_queue;
-    std::mutex send_queue_mutex;
-    std::condition_variable send_queue_condition;
+    std::queue<DataPacket> sendQueue;
+    std::mutex sendQueueMutex;
+    std::condition_variable sendQueueCondition;
 
 public:
     Bluetooth();
@@ -58,9 +58,9 @@ public:
 
     std::unique_ptr<DataPacket> getReceivedData();
 
-    bool isClientConnected();
+    bool getIsClientConnected();
     
-    bool isRunning();
+    bool getIsRunning();
 
     void sendData(DataPacket dataPacket);
 

@@ -1,6 +1,6 @@
 #include "Camera.h"
 
-Camera::Camera() : is_camera_connected(false) {}
+Camera::Camera() : isCameraConnected(false) {}
 
 Camera::~Camera() {
     camera.release();
@@ -12,28 +12,28 @@ bool Camera::init() {
 
     if (!camera.open()) {
         spdlog::critical("Unable to open the camera");
-        is_camera_connected = false;
+        isCameraConnected = false;
         return false;
     }
 
-    is_camera_connected = true;
+    isCameraConnected = true;
     return true;
 }
 
 bool Camera::IsConnected(){
-    return is_camera_connected;
+    return isCameraConnected;
 }
 
 std::vector<uint8_t> Camera::captureImage() {
     if (!camera.isOpened()) {
         spdlog::error("Camera is not opened");
-        is_camera_connected = false;
+        isCameraConnected = false;
         return {};
     }
 
     if (!camera.grab()) {
         spdlog::error("Capturing image");
-        is_camera_connected = false;
+        isCameraConnected = false;
         return {};
     }
 

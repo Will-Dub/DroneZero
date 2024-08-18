@@ -26,7 +26,7 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
-std::atomic<bool> is_running(true);
+std::atomic<bool> isRunning(true);
 Bluetooth bluetooth;
 
 /**
@@ -38,7 +38,7 @@ void uartListenerTask(UART* uart) {
 
 void signal_handler(int signal) {
     if (signal == SIGINT) {
-        is_running = false;
+        isRunning = false;
     }
 }
 
@@ -97,32 +97,32 @@ int main() {
 
     spdlog::info("-------------START-------------");
     
-    while (is_running) {
+    while (isRunning) {
         //-------------------------------------------
         //Handle new data from the pico
         if (uart.isNewDataReceived()) {
-            std::optional<Message> received_message_opt = uart.getReceivedMessage();
+            std::optional<Message> receivedMessageOpt = uart.getReceivedMessage();
             
-            if (received_message_opt.has_value()) {
-                Message received_message = received_message_opt.value();
+            if (receivedMessageOpt.has_value()) {
+                Message receivedMessage = receivedMessageOpt.value();
                 //Handle new message
-                switch(received_message.type){
+                switch(receivedMessage.type){
                     case MessageType::PositionData:
-                        *latestPositionData = received_message_opt.value().data.position_data;
-                        std::cout << "Long: " << latestPositionData->gps_longitude << " Lat: " << latestPositionData->gps_latitude << " Alt: " << latestPositionData->gps_altitude << std::endl;
+                        *latestPositionData = receivedMessage.data.positionData;
+                        std::cout << "Long: " << latestPositionData->gpsLongitude << " Lat: " << latestPositionData->gpsLatitude << " Alt: " << latestPositionData->gpsAltitude << std::endl;
                         break;
                     case MessageType::SensorData:
-                        std::cout << "Accel x: " << received_message.data.sensor_data.accel_x << " Accel y: " << received_message.data.sensor_data.accel_y << " Accel z: " << received_message.data.sensor_data.accel_z << std::endl;
-                        std::cout << "Gyro x: " << received_message.data.sensor_data.gyro_x << " Gyro y: " << received_message.data.sensor_data.gyro_y << " Gyro z: " << received_message.data.sensor_data.gyro_z << std::endl;
-                        std::cout << "Mag x: " << received_message.data.sensor_data.mag_x << " Mag y: " << received_message.data.sensor_data.mag_x << " Mag z: " << received_message.data.sensor_data.mag_z << std::endl;
+                        std::cout << "Accel x: " << receivedMessage.data.sensorData.accelX << " Accel y: " << receivedMessage.data.sensorData.accelY << " Accel z: " << receivedMessage.data.sensorData.accelZ << std::endl;
+                        std::cout << "Gyro x: " << receivedMessage.data.sensorData.gyroX << " Gyro y: " << receivedMessage.data.sensorData.gyroY << " Gyro z: " << receivedMessage.data.sensorData.gyroZ << std::endl;
+                        std::cout << "Mag x: " << receivedMessage.data.sensorData.magX << " Mag y: " << receivedMessage.data.sensorData.magY << " Mag z: " << receivedMessage.data.sensorData.magZ << std::endl;
                         break;
                     case MessageType::LogData:
-                        if(received_message.data.log_data.type == LogType::LOG_INFO){
-                            spdlog::info("Received log(pico): {}", received_message.data.log_data.message);
-                        }else if(received_message.data.log_data.type == LogType::LOG_ERROR){
-                            spdlog::error("Received log(pico): {}", received_message.data.log_data.message);
+                        if(receivedMessage.data.logData.type == LogType::LOG_INFO){
+                            spdlog::info("Received log(pico): {}", receivedMessage.data.logData.message);
+                        }else if(receivedMessage.data.logData.type == LogType::LOG_ERROR){
+                            spdlog::error("Received log(pico): {}", receivedMessage.data.logData.message);
                         }else{
-                            spdlog::critical("Received log(pico): {}", received_message.data.log_data.message);
+                            spdlog::critical("Received log(pico): {}", receivedMessage.data.logData.message);
                         }
                         break;
                 }
@@ -155,11 +155,11 @@ int main() {
                     }
                     
                     std::ostringstream oss;
-                    oss << latestPositionData->gps_latitude << ",";
-                    oss << latestPositionData->gps_longitude << ",";
-                    oss << latestPositionData->gps_altitude << ",";
-                    oss << latestPositionData->gps_kmph << ",";
-                    oss << latestPositionData->gps_course_deg;
+                    oss << latestPositionData->gpsLatitude << ",";
+                    oss << latestPositionData->gpsLongitude << ",";
+                    oss << latestPositionData->gpsAltitude << ",";
+                    oss << latestPositionData->gpsKmph << ",";
+                    oss << latestPositionData->gpsCourseDeg;
                     std::string dataStr = oss.str();
                     std::vector<uint8_t> dataVector = bluetooth.stringToVector(dataStr);
 
@@ -187,6 +187,12 @@ int main() {
         auto elapsedTime = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count();
         if (elapsedTime >= 5) {
             std::cout << "Message taken(per 5s): "<< messageCount << std::endl;
+            Message message;
+            message.type = MessageType::RequestData;
+            message.data.requestData.requestType = RequestType::POSITION_REQUEST;
+            uart.writeMessage(message);
+            message.data.requestData.requestType = RequestType::SENSOR_REQUEST;
+            uart.writeMessage(message);
             messageCount = 0;
             startTime = std::chrono::steady_clock::now();
         }

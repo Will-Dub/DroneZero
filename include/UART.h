@@ -23,7 +23,8 @@ private:
     int uart_filestream;
     std::mutex mtx;
     bool newDataReceived;
-    std::vector<uint8_t> received_data;
+    std::vector<uint8_t> receivedData;
+    const size_t MAX_BUFFER_SIZE = 1000;
 
 public:
     UART(const char* device, int baud);
