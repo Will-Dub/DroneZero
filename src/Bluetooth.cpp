@@ -53,6 +53,20 @@ void Bluetooth::bluetoothSendTask(int clientSocket) {
         }
 
         // Send the data
+        //Send the drone id(1 byte)
+        if(send(clientSocket, &dataPacket.droneId, sizeof(dataPacket.droneId), 0) < 0){
+            spdlog::error("Failed to send data");
+            isClientConnected.store(false);
+            return;
+        }
+
+         //Send the packet id(4 byte)
+        if(send(clientSocket, &dataPacket.packetId, sizeof(dataPacket.packetId), 0) < 0){
+            spdlog::error("Failed to send data");
+            isClientConnected.store(false);
+            return;
+        }
+
         //Send the type(1 byte)
         if(send(clientSocket, &dataPacket.type, sizeof(dataPacket.type), 0) < 0){
             spdlog::error("Failed to send data");
@@ -137,9 +151,25 @@ void Bluetooth::bluetoothServerTask() {
 
         //Receive data
         while (isClientConnected.load()) {
+            // Read Drone id (1 byte)
+            uint8_t droneId;
+            ssize_t bytesReceived = recv(clientSocket, &droneId, sizeof(droneId), 0);
+            if (bytesReceived <= 0) {
+                spdlog::error("Failed to receive data. Bytes received: {}", bytesReceived);
+                break;
+            }
+
+            // Read packet id (4 bytes) little endian
+            uint32_t packetId;
+            bytesReceived = recv(clientSocket, &packetId, sizeof(packetId), 0);
+            if (bytesReceived <= 0) {
+                spdlog::error("Failed to receive data. Bytes received: {}", bytesReceived);
+                break;
+            }
+
             // Read DataType (1 byte)
             uint8_t typeOrdinal;
-            ssize_t bytesReceived = recv(clientSocket, &typeOrdinal, sizeof(typeOrdinal), 0);
+            bytesReceived = recv(clientSocket, &typeOrdinal, sizeof(typeOrdinal), 0);
             if (bytesReceived <= 0) {
                 spdlog::error("Failed to receive data. Bytes received: {}", bytesReceived);
                 break;
@@ -169,6 +199,8 @@ void Bluetooth::bluetoothServerTask() {
             if (totalBytesReceived == dataSize) {
                 // Handle the received data
                 DataPacket dataPacket;
+                dataPacket.droneId = droneId;
+                dataPacket.packetId = packetId;
                 dataPacket.type = dataType;
                 dataPacket.dataSize = dataSize;
                 dataPacket.data = data;

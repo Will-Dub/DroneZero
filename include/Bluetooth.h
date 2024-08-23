@@ -26,6 +26,8 @@ enum DataType : uint8_t {
 };
 
 struct DataPacket {
+    uint8_t droneId;
+    uint32_t packetId;
     DataType type;
     uint32_t dataSize;
     std::vector<uint8_t> data;

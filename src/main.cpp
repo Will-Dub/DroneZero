@@ -52,6 +52,8 @@ void sendCaptureTask(Camera& camera, Bluetooth& bluetooth, int quality){
     std::vector<uint8_t> imageData = camera.captureImage();
 
     DataPacket dataPacket;
+    dataPacket.droneId = 3;
+    dataPacket.packetId = 4;
     dataPacket.type = DataType::IMAGE;
     dataPacket.data = camera.convertToJpeg(imageData, camera.getWidth(), camera.getHeight(), quality);
     dataPacket.dataSize = dataPacket.data.size();
@@ -164,6 +166,8 @@ int main() {
                     std::vector<uint8_t> dataVector = bluetooth.stringToVector(dataStr);
 
                     DataPacket dataPacket;
+                    dataPacket.droneId = 3;
+                    dataPacket.packetId = 4;
                     dataPacket.type = DataType::GPS;
                     dataPacket.data = dataVector;
                     dataPacket.dataSize = dataPacket.data.size();
