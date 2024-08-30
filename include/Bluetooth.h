@@ -12,26 +12,7 @@
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/rfcomm.h>
 #include <spdlog/spdlog.h>
-
-enum DataType : uint8_t {
-    IMAGE, // Client sends, server respond
-    CONTROL, // Client sends
-    INFO, // Client sends, server respond
-    STATUS, // Client sends, server respond
-    LOG, // Client sends, server respond
-    SENSOR, // Client sends, server respond
-    GPS,  // Client sends, server respond
-    STOP, //Client or server sends
-    TEST,
-};
-
-struct DataPacket {
-    uint8_t droneId;
-    uint32_t packetId;
-    DataType type;
-    uint32_t dataSize;
-    std::vector<uint8_t> data;
-};
+#include "DataPacket.h"
 
 class Bluetooth {
 private:

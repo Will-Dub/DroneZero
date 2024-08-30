@@ -62,6 +62,18 @@ void sendCaptureTask(Camera& camera, Bluetooth& bluetooth, int quality){
     return;
 }
 
+std::vector<std::string> split(const std::string& str, char delimiter) {
+    std::vector<std::string> elements;
+    std::string element;
+    std::stringstream ss(str);
+
+    while (std::getline(ss, element, delimiter)) {
+        elements.push_back(element);
+    }
+
+    return elements;
+}
+
 int main() {
     signal(SIGINT, signal_handler);
 
@@ -93,6 +105,7 @@ int main() {
     //-------------------------------------------
     //Main loop
     std::unique_ptr<PositionData> latestPositionData = std::make_unique<PositionData>();
+    std::unique_ptr<SensorData> latestSensorData = std::make_unique<SensorData>();
 
     int messageCount = 0;
     auto startTime = std::chrono::steady_clock::now();
@@ -103,43 +116,66 @@ int main() {
         //-------------------------------------------
         //Handle new data from the pico
         if (uart.isNewDataReceived()) {
-            std::optional<Message> receivedMessageOpt = uart.getReceivedMessage();
+            std::optional<DataPacket> dataPacketUartOpt = uart.getReceivedDataPacket();
             
-            if (receivedMessageOpt.has_value()) {
-                Message receivedMessage = receivedMessageOpt.value();
-                //Handle new message
-                switch(receivedMessage.type){
-                    case MessageType::PositionData:
-                        *latestPositionData = receivedMessage.data.positionData;
-                        std::cout << "Long: " << latestPositionData->gpsLongitude << " Lat: " << latestPositionData->gpsLatitude << " Alt: " << latestPositionData->gpsAltitude << std::endl;
-                        break;
-                    case MessageType::SensorData:
-                        std::cout << "Accel x: " << receivedMessage.data.sensorData.accelX << " Accel y: " << receivedMessage.data.sensorData.accelY << " Accel z: " << receivedMessage.data.sensorData.accelZ << std::endl;
-                        std::cout << "Gyro x: " << receivedMessage.data.sensorData.gyroX << " Gyro y: " << receivedMessage.data.sensorData.gyroY << " Gyro z: " << receivedMessage.data.sensorData.gyroZ << std::endl;
-                        std::cout << "Mag x: " << receivedMessage.data.sensorData.magX << " Mag y: " << receivedMessage.data.sensorData.magY << " Mag z: " << receivedMessage.data.sensorData.magZ << std::endl;
-                        break;
-                    case MessageType::LogData:
-                        if(receivedMessage.data.logData.type == LogType::LOG_INFO){
-                            spdlog::info("Received log(pico): {}", receivedMessage.data.logData.message);
-                        }else if(receivedMessage.data.logData.type == LogType::LOG_ERROR){
-                            spdlog::error("Received log(pico): {}", receivedMessage.data.logData.message);
-                        }else{
-                            spdlog::critical("Received log(pico): {}", receivedMessage.data.logData.message);
-                        }
-                        break;
+            if (dataPacketUartOpt.has_value()) {
+                    DataPacket dataPacketUart = dataPacketUartOpt.value();
+
+                    std::string dataString(dataPacketUart.data.begin(), dataPacketUart.data.end());
+
+                    std::vector<std::string> dataElements = split(dataString, ';');
+                    // TODO Refactor that shit haha
+                    switch(dataPacketUart.type){
+                        case DataType::GPS:
+                            latestPositionData->gpsLongitude = std::stod(dataElements[0]);
+                            latestPositionData->gpsLatitude = std::stod(dataElements[1]);
+                            latestPositionData->gpsAltitude = std::stod(dataElements[2]);
+                            latestPositionData->gpsKmph = std::stod(dataElements[3]);
+                            latestPositionData->gpsCourseDeg = std::stod(dataElements[4]);
+                            
+                            std::cout << "Long: " << latestPositionData->gpsLongitude << " Lat: " << latestPositionData->gpsLatitude << " Alt: " << latestPositionData->gpsAltitude << std::endl;
+                            break;
+                        case DataType::SENSOR:
+                            latestSensorData->accelX = std::stof(dataElements[0]);
+                            latestSensorData->accelY = std::stof(dataElements[1]);
+                            latestSensorData->accelZ = std::stof(dataElements[2]);
+                            latestSensorData->gyroX = std::stof(dataElements[3]);
+                            latestSensorData->gyroY = std::stof(dataElements[4]);
+                            latestSensorData->gyroZ = std::stof(dataElements[5]);
+                            latestSensorData->magX = static_cast<uint16_t>(std::stoul(dataElements[6]));
+                            latestSensorData->magY = static_cast<uint16_t>(std::stoul(dataElements[7]));
+                            latestSensorData->magZ = static_cast<uint16_t>(std::stoul(dataElements[8]));
+                            latestSensorData->pitch = std::stof(dataElements[9]);
+                            latestSensorData->roll = std::stof(dataElements[10]);
+                            latestSensorData->yaw = std::stof(dataElements[11]);
+
+
+                            std::cout << "Accel x: " << latestSensorData->accelX << " Accel y: " << latestSensorData->accelY << " Accel z: " << latestSensorData->accelZ << std::endl;
+                            std::cout << "Gyro x: " << latestSensorData->gyroX << " Gyro y: " << latestSensorData->gyroY << " Gyro z: " << latestSensorData->gyroZ << std::endl;
+                            std::cout << "Mag x: " << latestSensorData->magX << " Mag y: " << latestSensorData->magY << " Mag z: " << latestSensorData->magZ << std::endl;
+                            break;
+                        case DataType::LOG:
+                            if(dataElements[0] == "info"){
+                                spdlog::info("Received log(pico): {}", dataElements[1]);
+                            }else if(dataElements[0] == "error"){
+                                spdlog::error("Received log(pico): {}", dataElements[1]);
+                            }else{
+                                spdlog::critical("Received log(pico): {}", dataElements[1]);
+                            }
+                            break;
                 }
             }
         }
 
         //-------------------------------------------
         //Handle new data from the bluetooth
-        std::unique_ptr<DataPacket> new_received_data = bluetooth.getReceivedData();
-        if(new_received_data){
-            std::string data_str(new_received_data->data.begin(), new_received_data->data.end());
-            switch (new_received_data->type) {
-                case IMAGE: {
+        std::unique_ptr<DataPacket> dataPacketBluetooth = bluetooth.getReceivedData();
+        if(dataPacketBluetooth){
+            std::string data_str(dataPacketBluetooth->data.begin(), dataPacketBluetooth->data.end());
+            switch (dataPacketBluetooth->type) {
+                case DataType::IMAGE: {
                     int received_int = 10;
-                    if (new_received_data->data.size() >= 1) {
+                    if (dataPacketBluetooth->data.size() >= 1) {
                         try {
                             received_int = std::stoi(data_str);
                         } catch (const std::exception& e) {
@@ -151,16 +187,16 @@ int main() {
                     imageThread.detach();
                     break;
                 }
-                case GPS: {
+                case DataType::GPS: {
                     if(!latestPositionData){
                         break;
                     }
                     
                     std::ostringstream oss;
-                    oss << latestPositionData->gpsLatitude << ",";
-                    oss << latestPositionData->gpsLongitude << ",";
-                    oss << latestPositionData->gpsAltitude << ",";
-                    oss << latestPositionData->gpsKmph << ",";
+                    oss << latestPositionData->gpsLatitude << ";";
+                    oss << latestPositionData->gpsLongitude << ";";
+                    oss << latestPositionData->gpsAltitude << ";";
+                    oss << latestPositionData->gpsKmph << ";";
                     oss << latestPositionData->gpsCourseDeg;
                     std::string dataStr = oss.str();
                     std::vector<uint8_t> dataVector = bluetooth.stringToVector(dataStr);
@@ -171,6 +207,7 @@ int main() {
                     dataPacket.type = DataType::GPS;
                     dataPacket.data = dataVector;
                     dataPacket.dataSize = dataPacket.data.size();
+                    uart.writeDataPacket(*dataPacketBluetooth);
                     bluetooth.sendData(dataPacket);
                     break;
                 }
@@ -191,15 +228,10 @@ int main() {
         auto elapsedTime = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count();
         if (elapsedTime >= 5) {
             std::cout << "Message taken(per 5s): "<< messageCount << std::endl;
-            Message message;
-            message.type = MessageType::RequestData;
-            message.data.requestData.requestType = RequestType::POSITION_REQUEST;
-            uart.writeMessage(message);
-            message.data.requestData.requestType = RequestType::SENSOR_REQUEST;
-            uart.writeMessage(message);
             messageCount = 0;
             startTime = std::chrono::steady_clock::now();
         }
+        sleep(0.02);
     }
 
     bluetooth.stop();
