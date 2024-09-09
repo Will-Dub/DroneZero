@@ -45,7 +45,7 @@ public:
     
     bool getIsRunning();
 
-    void sendData(DataPacket dataPacket);
+    void sendDataPacket(DataPacket dataPacket);
 
     void startServer();
 

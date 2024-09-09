@@ -248,7 +248,7 @@ std::unique_ptr<DataPacket> Bluetooth::getReceivedData(){
 /*
 * Sends a datapacket to the client
 */
-void Bluetooth::sendData(DataPacket dataPacket){
+void Bluetooth::sendDataPacket(DataPacket dataPacket){
     if(isClientConnected.load()){
         {
             std::lock_guard<std::mutex> lock(sendQueueMutex);

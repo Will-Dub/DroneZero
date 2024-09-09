@@ -16,7 +16,6 @@
 #include <algorithm>
 #include <spdlog/spdlog.h>
 
-#include "Message.h"
 #include "DataPacket.h"
 
 class UART {
@@ -36,8 +35,6 @@ public:
 
     std::vector<std::string> getReceivedLines();
 
-    std::optional<Message> getReceivedMessage();
-
     std::optional<DataPacket> getReceivedDataPacket();
 
     bool isNewDataReceived();
@@ -45,8 +42,6 @@ public:
     void listenForData();
 
     int write(const std::string& data);
-
-    int writeMessage(const Message &message);
 
     void writeDataPacket(const DataPacket &data_packet);
 };

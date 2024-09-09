@@ -30,20 +30,6 @@ int UART::write(const std::string& data) {
     return 0;
 }
 
-int UART::writeMessage(const Message &data) {
-    uint8_t buffer[256];
-    size_t data_size = data.serialize(buffer, sizeof(buffer));
-    
-    if (uart_filestream != -1) {
-        int count = ::write(uart_filestream, buffer, data_size);
-        if(count <= 0){
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
 void UART::writeDataPacket(const DataPacket &data_packet){
     uint8_t buffer[256];
     size_t data_size = data_packet.serialize(buffer, sizeof(buffer));
@@ -71,20 +57,11 @@ bool UART::isNewDataReceived() {
 
 std::optional<DataPacket> UART::getReceivedDataPacket() {
     std::lock_guard<std::mutex> lock(mtx);
-    std::cout << "[";
-    for (size_t i = 0; i < receivedData.size(); ++i) {
-        std::cout << static_cast<int>(receivedData[i]);  // Cast to int to display as a number
-        if (i < receivedData.size() - 1) {
-            std::cout << ", ";  // Add a comma separator except after the last element
-        }
-    }
-    std::cout << "]" << std::endl;
-
     while (receivedData.size() >= 10) {
         // Find the start marker
-        auto start_it = std::find(receivedData.begin(), receivedData.end(), Message::START_MARKER);
+        auto start_it = std::find(receivedData.begin(), receivedData.end(), DataPacket::START_MARKER);
         if (start_it == receivedData.end()) {
-            // No start marker found, clear all data if incomplete message
+            // No start marker found, clear all data if incomplete data packet
             receivedData.clear();
             return std::nullopt;
         }
@@ -95,108 +72,45 @@ std::optional<DataPacket> UART::getReceivedDataPacket() {
             return std::nullopt;
         }
 
-        // Extract the message length
-        uint32_t message_length;
-        memcpy(&message_length, &*(start_it + 7), sizeof(uint32_t));
+        // Extract the data length
+        uint32_t dataLength;
+        memcpy(&dataLength, &*(start_it + 7), sizeof(uint32_t));
 
-        //Verify message length is in the range
-        if (message_length > MAX_BUFFER_SIZE) {
-            // Message size exceeds buffer limit, discard all data
-            auto next_start_it = std::find(start_it + 1, receivedData.end(), Message::START_MARKER);
+        //Verify data length is in the range
+        if (dataLength > MAX_BUFFER_SIZE) {
+            // Data size exceeds buffer limit, remove all
+            auto next_start_it = std::find(start_it + 1, receivedData.end(), DataPacket::START_MARKER);
             receivedData.erase(receivedData.begin(), next_start_it);
             return std::nullopt;
         }
 
-        // Ensure we have the complete message
-        size_t total_message_size = 12 + message_length;
-        if (remaining_data < total_message_size) {
+        // Ensure we have the complete data packet
+        size_t totalDataPacketSize = 12 + dataLength;
+        if (remaining_data < totalDataPacketSize) {
             return std::nullopt;
         }
 
         // Check the end marker
-        auto end_it = start_it + total_message_size - 1;
-        if (*end_it != Message::END_MARKER) {
+        auto end_it = start_it + totalDataPacketSize - 1;
+        if (*end_it != DataPacket::END_MARKER) {
             // Invalid end marker, discard data up to next start marker
-            auto next_start_it = std::find(start_it + 1, receivedData.end(), Message::START_MARKER);
+            auto next_start_it = std::find(start_it + 1, receivedData.end(), DataPacket::START_MARKER);
             if (next_start_it != receivedData.end()) {
-                receivedData.erase(receivedData.begin(), next_start_it); // Discard up to next start marker
+                receivedData.erase(receivedData.begin(), next_start_it); // Remove to next start marker
             } else {
-                receivedData.clear(); // No more start marker found, clear all data
+                receivedData.clear(); // No more start marker found, remove all
             }
             return std::nullopt;
         }
 
-        // Extract and deserialize the message
+        // Extract and deserialize the data packet
         std::vector<uint8_t> buffer(start_it, end_it + 1);
         DataPacket dataPacket;
         if (dataPacket.deserialize(buffer.data(), buffer.size())) {
-            receivedData.erase(receivedData.begin(), end_it + 1); // Remove the processed message including the end marker
+            receivedData.erase(receivedData.begin(), end_it + 1); // Remove the processed data packet + end marker
             return dataPacket;
         } else {
-            receivedData.erase(receivedData.begin(), start_it + 1); // Move past the invalid start marker
-        }
-    }
-
-    return std::nullopt;
-}
-
-std::optional<Message> UART::getReceivedMessage() {
-    std::lock_guard<std::mutex> lock(mtx);
-
-    while (receivedData.size() >= 6) {
-        // Find the start marker
-        auto start_it = std::find(receivedData.begin(), receivedData.end(), Message::START_MARKER);
-        if (start_it == receivedData.end()) {
-            // No start marker found, clear all data if incomplete message
-            receivedData.clear();
-            return std::nullopt;
-        }
-
-        // Calculate the remaining data after the start marker
-        size_t remaining_data = std::distance(start_it, receivedData.end());
-        if (remaining_data < 6) {  // Minimum size check
-            return std::nullopt;
-        }
-
-        // Extract the message length
-        uint16_t message_length;
-        memcpy(&message_length, &*(start_it + 1), sizeof(uint16_t));
-
-        //Verify message length is in the range
-        if (message_length > MAX_BUFFER_SIZE) {
-            // Message size exceeds buffer limit, discard all data
-            auto next_start_it = std::find(start_it + 1, receivedData.end(), Message::START_MARKER);
-            receivedData.erase(receivedData.begin(), next_start_it);
-            return std::nullopt;
-        }
-
-        // Ensure we have the complete message
-        size_t total_message_size = 6 + message_length;
-        if (remaining_data < total_message_size) {
-            return std::nullopt;
-        }
-
-        // Check the end marker
-        auto end_it = start_it + total_message_size - 1; // Adjust for inclusive end marker check
-        if (*end_it != Message::END_MARKER) {
-            // Invalid end marker, discard data up to next start marker
-            auto next_start_it = std::find(start_it + 1, receivedData.end(), Message::START_MARKER);
-            if (next_start_it != receivedData.end()) {
-                receivedData.erase(receivedData.begin(), next_start_it); // Discard up to next start marker
-            } else {
-                receivedData.clear(); // No more start marker found, clear all data
-            }
-            return std::nullopt;
-        }
-
-        // Extract and deserialize the message
-        std::vector<uint8_t> buffer(start_it, end_it + 1);
-        Message message;
-        if (message.deserialize(buffer.data(), buffer.size())) {
-            receivedData.erase(receivedData.begin(), end_it + 1); // Remove the processed message including the end marker
-            return message;
-        } else {
-            receivedData.erase(receivedData.begin(), start_it + 1); // Move past the invalid start marker
+            receivedData.erase(receivedData.begin(), start_it + 1); // Remove the invalid start
         }
     }
 

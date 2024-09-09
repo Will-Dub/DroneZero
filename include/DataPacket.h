@@ -5,7 +5,88 @@
 #include <string.h>
 #include <cstdint>
 
+// Message types
+enum class MessageType {
+    ControlData,
+    ModeData,
+    PositionData,
+    RequestData,
+    StatusData,
+    SensorData,
+    LogData,
+};
+
+//-----------------------------
+//All enum used by message type
+
+enum LogType : uint8_t {
+    LOG_INFO,
+    LOG_ERROR,
+    LOG_CRITICAL
+};
+
+// Flight mode enumeration
+enum FlightMode {
+    MANUAL,
+    STABILIZE,
+    ALT_HOLD,
+    AUTO
+};
+
+enum RequestType {
+    STATUS_REQUEST,
+    POSITION_REQUEST,
+    MODE_REQUEST,
+    CONTROL_REQUEST,
+    SENSOR_REQUEST,
+};
+
+//-----------------------------
+//All message type
+struct ControlData {
+    //Each motor control
+    uint8_t motor_pwm[4];
+};
+
+struct LogData {
+    // Log data
+    LogType type;
+    char message[30];
+};
+
+struct ModeData {
+    // State information
+    FlightMode mode;
+    bool failSafeTriggered;
+    double desiredLatitude, desiredLongitude, desiredAltitude, desiredSpeed;
+
+    // Control parameters
+    float desiredPitch, desiredRoll, desiredYaw;
+};
+
+struct PositionData {
+    double gpsLatitude, gpsLongitude, gpsAltitude, gpsKmph, gpsCourseDeg;
+};
+
+struct RequestData{
+    RequestType requestType;
+};
+
+struct StatusData {
+    bool uartZeroConnected, uartGpsConnected, i2cConnected;
+
+    bool useMotor, useMpu6050, useQmc5883l, useGps, useLog;
+};
+
+struct SensorData {
+    float accelX, accelY, accelZ;
+    float gyroX, gyroY, gyroZ;
+    int16_t magX, magY, magZ;
+    float pitch, roll, yaw;
+};
+
 enum class DataType : uint8_t {
+    UNDEFINED,
     IMAGE,
     CONTROL,
     INFO,
@@ -14,7 +95,9 @@ enum class DataType : uint8_t {
     SENSOR,
     GPS,
     STOP,
-    TEST
+    STOP_SPECIFIC,
+    START,
+    START_SPECIFIC
 };
 
 struct DataPacket {
@@ -27,7 +110,7 @@ struct DataPacket {
     uint32_t dataSize;
     std::vector<uint8_t> data;
 
-    DataPacket() : droneId(0), packetId(0), type(DataType::TEST), dataSize(0) {}
+    DataPacket() : droneId(0), packetId(0), type(DataType::UNDEFINED), dataSize(0) {}
 
     DataPacket(uint8_t drone, uint32_t packet, DataType t, const std::vector<uint8_t>& d) 
         : droneId(drone), packetId(packet), type(t), data(d), dataSize(d.size()) {}
